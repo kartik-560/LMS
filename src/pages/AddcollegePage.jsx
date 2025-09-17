@@ -19,6 +19,11 @@ function AddCollegePage() {
   } = useForm({
     defaultValues: {
       studentLimit: 100,
+      validity: "2025-12-31",
+      email: "",
+      contactPerson: "",
+      name: "",
+      mobileNumber: "",
       adminLimit: 5,
       instructorLimit: 5,
     },

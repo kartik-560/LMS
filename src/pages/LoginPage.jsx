@@ -6,15 +6,16 @@ import { toast } from "react-hot-toast";
 import useAuthStore from "../store/useAuthStore";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import { authAPI } from "../services/api"; // Ensure you have this API method to handle Google and OTP login
+import { authAPI } from "../services/api";
 
 const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [step, setStep] = useState("choice");
+  const [step, setStep] = useState("choice"); // "choice" | "email" | "passwordLogin"
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockTimer, setLockTimer] = useState(0);
+  const [isFirstTimeUser, setIsFirstTimeUser] = useState(false);
 
   const { login } = useAuthStore();
   const navigate = useNavigate();
@@ -23,7 +24,6 @@ const LoginPage = () => {
     register,
     handleSubmit,
     formState: { errors },
-    reset,
   } = useForm();
 
   const startLockTimer = () => {
@@ -48,45 +48,69 @@ const LoginPage = () => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
-  // Handle Google login
+  // Google login
   const handleGoogleLogin = () => {
     window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;
   };
 
-  // Send OTP
-const handleSendOtp = async ({ email }) => {
-  setIsLoading(true);
-  try {
-    // Check if the request is structured correctly.
-    const response = await authAPI.loginOtpBegin({ email });
-    toast.success("OTP sent successfully!");
-    setOtpSent(true);
-  } catch (e) {
-    toast.error(e?.response?.data?.message || "Failed to send OTP");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  // OTP flow
+  const handleSendOtp = async ({ email }) => {
+    setIsLoading(true);
+    try {
+      const response = await authAPI.loginOtpBegin({ email });
+      const userExists = response?.data?.userExists;
+      setIsFirstTimeUser(!userExists);
 
-  // Verify OTP
-const handleVerifyOtp = async ({ email, otp }) => {
-  console.log('Verifying OTP with values:', { email, otp }); // Log the payload
-  try {
-    const response = await authAPI.loginOtpVerify(email, otp);
-    const { token, user } = response.data.data;
+      toast.success("OTP sent successfully!");
+      setOtpSent(true);
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Failed to send OTP");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    localStorage.setItem("auth_token", token);
-    sessionStorage.setItem("auth_token", token);
-    useAuthStore.getState().setToken(token);
+  const handleVerifyOtp = async ({ email, otp, password }) => {
+    setIsLoading(true);
+    try {
+      const response = await authAPI.loginOtpVerify(email, otp);
+      const { token } = response.data.data;
 
-    navigate("/dashboard", { replace: true });
-  } catch (e) {
-    console.error('OTP verification failed:', e);
-    toast.error(e?.response?.data?.message || "Invalid OTP");
-  }
-};
+      if (!isFirstTimeUser) {
+        const passwordValid = await authAPI.verifyPassword({ email, password });
+        if (!passwordValid) throw new Error("Invalid password");
+      }
 
+      localStorage.setItem("auth_token", token);
+      sessionStorage.setItem("auth_token", token);
+      useAuthStore.getState().setToken(token);
 
+      navigate("/dashboard", { replace: true });
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Invalid OTP or password");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Password-only login
+  const handlePasswordLogin = async ({ email, password }) => {
+    setIsLoading(true);
+    try {
+      const response = await authAPI.loginWithPassword({ email, password });
+      const { token } = response.data;
+
+      localStorage.setItem("auth_token", token);
+      sessionStorage.setItem("auth_token", token);
+      useAuthStore.getState().setToken(token);
+
+      navigate("/dashboard", { replace: true });
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Invalid email or password");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex flex-col justify-center py-8 px-4 sm:px-6 lg:px-8">
@@ -111,7 +135,7 @@ const handleVerifyOtp = async ({ email, otp }) => {
         <div className="bg-white py-6 px-4 sm:py-8 sm:px-10 shadow-xl sm:rounded-2xl border border-gray-100">
           {step === "choice" && (
             <div className="space-y-4">
-              {/* Google button */}
+              {/* Google */}
               <Button
                 onClick={handleGoogleLogin}
                 className="w-full flex items-center justify-center space-x-2"
@@ -125,7 +149,7 @@ const handleVerifyOtp = async ({ email, otp }) => {
                 <span>Continue with Google</span>
               </Button>
 
-              {/* Email button */}
+              {/* OTP Email */}
               <Button
                 onClick={() => setStep("email")}
                 variant="outline"
@@ -133,11 +157,23 @@ const handleVerifyOtp = async ({ email, otp }) => {
                 size="lg"
               >
                 <Mail size={20} className="text-gray-500" />
-                <span>Continue with Email</span>
+                <span>Continue with Email (OTP)</span>
+              </Button>
+
+              {/* Password */}
+              <Button
+                onClick={() => setStep("passwordLogin")}
+                variant="outline"
+                className="w-full flex items-center justify-center space-x-2"
+                size="lg"
+              >
+                <Lock size={20} className="text-gray-500" />
+                <span>Continue with Password</span>
               </Button>
             </div>
           )}
 
+          {/* OTP flow */}
           {step === "email" && (
             <form
               className="space-y-5 sm:space-y-6"
@@ -165,16 +201,34 @@ const handleVerifyOtp = async ({ email, otp }) => {
               />
 
               {otpSent && (
-                <Input
-                  label="OTP"
-                  type="text"
-                  placeholder="Enter the OTP"
-                  error={errors.otp?.message}
-                  {...register("otp", {
-                    required: "OTP is required",
-                    minLength: { value: 4, message: "OTP must be at least 4 digits" },
-                  })}
-                />
+                <>
+                  <Input
+                    label="OTP"
+                    type="text"
+                    placeholder="Enter the OTP"
+                    error={errors.otp?.message}
+                    {...register("otp", {
+                      required: "OTP is required",
+                      minLength: { value: 4, message: "OTP must be at least 4 digits" },
+                    })}
+                  />
+
+                  {!isFirstTimeUser && (
+                    <Input
+                      label="Password"
+                      type="password"
+                      placeholder="Enter your password"
+                      error={errors.password?.message}
+                      {...register("password", {
+                        required: "Password is required",
+                        minLength: {
+                          value: 6,
+                          message: "Password must be at least 6 characters",
+                        },
+                      })}
+                    />
+                  )}
+                </>
               )}
 
               <Button
@@ -196,7 +250,6 @@ const handleVerifyOtp = async ({ email, otp }) => {
                   : "Send OTP"}
               </Button>
 
-              {/* Back button */}
               <Button
                 type="button"
                 onClick={() => setStep("choice")}
@@ -208,6 +261,69 @@ const handleVerifyOtp = async ({ email, otp }) => {
             </form>
           )}
 
+          {/* Password login */}
+          {step === "passwordLogin" && (
+            <form
+              className="space-y-5 sm:space-y-6"
+              onSubmit={handleSubmit(handlePasswordLogin)}
+            >
+              <Input
+                label="Email address"
+                type="email"
+                placeholder="Enter your email"
+                error={errors.email?.message}
+                {...register("email", {
+                  required: "Email is required",
+                  pattern: {
+                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                    message: "Please enter a valid email address",
+                  },
+                })}
+                leftElement={
+                  <Mail
+                    size={20}
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                  />
+                }
+                className="pl-10"
+              />
+
+              <Input
+                label="Password"
+                type="password"
+                placeholder="Enter your password"
+                error={errors.password?.message}
+                {...register("password", {
+                  required: "Password is required",
+                  minLength: {
+                    value: 6,
+                    message: "Password must be at least 6 characters",
+                  },
+                })}
+              />
+
+              <Button
+                type="submit"
+                className="w-full flex items-center justify-center"
+                disabled={isLoading}
+                size="lg"
+              >
+                {isLoading && <Loader2 size={20} className="mr-2 animate-spin" />}
+                {isLoading ? "Signing in..." : "Sign in"}
+              </Button>
+
+              <Button
+                type="button"
+                onClick={() => setStep("choice")}
+                variant="ghost"
+                className="w-full"
+              >
+                ← Back
+              </Button>
+            </form>
+          )}
+
+          {/* Security note */}
           <div className="mt-5 sm:mt-6 p-3 bg-gray-50 rounded-lg text-center">
             <div className="flex items-center justify-center space-x-2">
               <Shield size={14} className="text-gray-500" />
@@ -232,9 +348,7 @@ const handleVerifyOtp = async ({ email, otp }) => {
             Terms
           </Link>
         </div>
-        <p className="mt-2 text-xs text-gray-400">
-          © 2025 Pugarch. All rights reserved.
-        </p>
+        <p className="mt-2 text-xs text-gray-400">© 2025 Pugarch. All rights reserved.</p>
       </div>
     </div>
   );

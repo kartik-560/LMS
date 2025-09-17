@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -8,7 +8,7 @@ import {
   ChevronRight,
   ChevronDown,
   FileText,
-  Lock,            // NEW: icon for lock panel
+  Lock,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-hot-toast";
@@ -16,7 +16,7 @@ import useAuthStore from "../store/useAuthStore";
 import Button from "../components/ui/Button";
 import Progress from "../components/ui/Progress";
 import Badge from "../components/ui/Badge";
-import { coursesAPI, chaptersAPI, FALLBACK_THUMB,progressAPI } from "../services/api";
+import { coursesAPI, chaptersAPI, FALLBACK_THUMB, progressAPI } from "../services/api";
 
 const makeHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -43,16 +43,18 @@ const CourseViewerPage = () => {
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState(null);
 
+  // ref to the main scroll area so we can scroll to top on next chapter
+  const mainPanelRef = useRef(null);
+
   useEffect(() => {
     fetchData();
   }, [courseId]);
 
   const isQuizUnlocked = (chapter) => {
-  if (!chapter?.hasQuiz) return false;
-  const prior = chapters
-    .filter(c => (c.order || 0) < (chapter.order || 0));
-  return prior.every(c => completedChapterIds.includes(c.id));
-};
+    if (!chapter?.hasQuiz) return false;
+    const prior = chapters.filter((c) => (c.order || 0) < (chapter.order || 0));
+    return prior.every((c) => completedChapterIds.includes(c.id));
+  };
 
   async function fetchData() {
     setLoading(true);
@@ -86,9 +88,8 @@ const CourseViewerPage = () => {
       setChapters(mappedChapters);
       if (mappedChapters.length) setCurrentChapter(mappedChapters[0]);
 
-         const ids = (await progressAPI.completedChapters(courseId)).data?.data ?? [];
-    setCompletedChapterIds(ids);
-
+      const ids = (await progressAPI.completedChapters(courseId)).data?.data ?? [];
+      setCompletedChapterIds(ids);
     } catch (err) {
       console.error("Course load failed:", err);
       toast.error("Failed to load course");
@@ -98,30 +99,27 @@ const CourseViewerPage = () => {
     }
   }
 
-  // Only load the quiz if the chapter HAS quiz AND the chapter is already completed (unlocked).
-useEffect(() => {
-  const resetQuizState = () => {
-    setQuiz(null);
-    setQuizAnswers({});
-    setQuizSubmitted(false);
-    setQuizScore(null);
-  };
+  // Load quiz only when chapter has quiz AND is unlocked
+  useEffect(() => {
+    const resetQuizState = () => {
+      setQuiz(null);
+      setQuizAnswers({});
+      setQuizSubmitted(false);
+      setQuizScore(null);
+    };
 
-  if (!currentChapter?.hasQuiz) {
-    resetQuizState();
-    return;
-  }
+    if (!currentChapter?.hasQuiz) {
+      resetQuizState();
+      return;
+    }
 
-  // Unlock rule: all previous chapters completed
-  if (!isQuizUnlocked(currentChapter)) {
-    resetQuizState();
-    return;
-  }
+    if (!isQuizUnlocked(currentChapter)) {
+      resetQuizState();
+      return;
+    }
 
-  // Unlocked → load quiz automatically
-  loadQuizForChapter(currentChapter.id);
-}, [currentChapter?.id, currentChapter?.hasQuiz, completedChapterIds.join("|")]);
-
+    loadQuizForChapter(currentChapter.id);
+  }, [currentChapter?.id, currentChapter?.hasQuiz, completedChapterIds.join("|")]);
 
   async function loadQuizForChapter(chapterId) {
     setQuizLoading(true);
@@ -150,9 +148,7 @@ useEffect(() => {
         full = fullRes.data;
       }
 
-      const questions = (full.questions || []).sort(
-        (a, b) => (a.order || 0) - (b.order || 0)
-      );
+      const questions = (full.questions || []).sort((a, b) => (a.order || 0) - (b.order || 0));
       setQuiz({
         id: full.id,
         title: full.title || "Quiz",
@@ -184,18 +180,45 @@ useEffect(() => {
 
   const isChapterCompleted = (id) => completedChapterIds.includes(id);
 
-  // UPDATED: accept options to prevent auto-advance (used when unlocking quiz)
-  const markChapterComplete = async ({ advance = true } = {}) => {
-  if (!currentChapter || isChapterCompleted(currentChapter.id)) return;
-  try {
-    await progressAPI.completeChapter(currentChapter.id);
-    setCompletedChapterIds((prev) => [...prev, currentChapter.id]);
-    toast.success("Chapter completed!");
-    if (advance) { /* your existing advance code */ }
-  } catch (e) {
-    toast.error("Failed to save progress");
-  }
-};
+  // --- NEW: goToNextChapter helper ---
+  const goToNextChapter = () => {
+    if (!currentChapter) return;
+    const currentIndex = chapters.findIndex((c) => c.id === currentChapter.id);
+    if (currentIndex === -1) return;
+
+    if (currentIndex < chapters.length - 1) {
+      const next = chapters[currentIndex + 1];
+      setCurrentChapter(next);
+
+      // scroll main panel to top for the new chapter
+      try {
+        mainPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (e) {
+        /* ignore if no ref */
+      }
+    } else {
+      toast.success("🎉 You have completed all chapters!");
+    }
+  };
+
+  // UPDATED: markChapterComplete accepts advance option (default false)
+  const markChapterComplete = async ({ advance = false } = {}) => {
+    if (!currentChapter || isChapterCompleted(currentChapter.id)) {
+      // if already completed and user asked to advance
+      if (advance) goToNextChapter();
+      return;
+    }
+    try {
+      await progressAPI.completeChapter(currentChapter.id);
+      setCompletedChapterIds((prev) => [...prev, currentChapter.id]);
+      toast.success("Chapter completed!");
+      if (advance) {
+        goToNextChapter();
+      }
+    } catch (e) {
+      toast.error("Failed to save progress");
+    }
+  };
 
   const handleAnswerChange = (qid, value) => {
     setQuizAnswers((prev) => ({ ...prev, [qid]: value }));
@@ -215,10 +238,7 @@ useEffect(() => {
       if (Array.isArray(q.correctOptionIndexes)) {
         const normalized = Array.isArray(ans) ? ans.map(Number).sort() : [];
         const correct = [...q.correctOptionIndexes].sort();
-        if (
-          normalized.length === correct.length &&
-          normalized.every((v, i) => v === correct[i])
-        ) {
+        if (normalized.length === correct.length && normalized.every((v, i) => v === correct[i])) {
           score += pts;
         }
         continue;
@@ -234,7 +254,8 @@ useEffect(() => {
       const { score, max } = scoreLocally(quiz, quizAnswers);
       setQuizScore({ score, max });
       toast.success("Quiz submitted!");
-      // After quiz submission we keep the default behavior (advance to next)
+      // After quiz submission we keep the default behavior: mark complete and advance
+      // this intentionally advances to next chapter
       markChapterComplete({ advance: true });
     } catch (e) {
       console.error(e);
@@ -267,144 +288,133 @@ useEffect(() => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex">
-      {/* Sidebar */}
-      <div
-        className={`${sidebarOpen ? "w-80" : "w-0"} transition-all duration-300 bg-white border-r border-gray-200 overflow-hidden flex flex-col`}
-      >
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/courses")}>
-              <ArrowLeft size={16} className="mr-2" />
-              Back to Courses
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(false)}>×</Button>
+    <div className="h-screen flex flex-col bg-gray-900">
+      {/* Top Nav Bar (always visible, static) */}
+      <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+        {!sidebarOpen && (
+          <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(true)}>
+            <BookOpen size={16} className="mr-2" />
+            Course Content
+          </Button>
+        )}
+        {currentChapter && (
+          <div className="flex-1 text-center">
+            <h2 className="text-lg font-semibold text-gray-900">{currentChapter.title}</h2>
+            <p className="text-sm text-gray-600">{course.title}</p>
           </div>
-          <div className="mb-4">
-            <h1 className="text-lg font-semibold text-gray-900 mb-2">{course.title}</h1>
-            <div className="flex items-center space-x-2 text-sm text-gray-600 mb-3">
-              <span>by {course.instructorName}</span>
-              <Badge variant="info" size="sm">{course.level}</Badge>
+        )}
+        <div className="w-16" />
+      </div>
+
+      {/* Content Area (fills the rest of screen) */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar (independent scroll) */}
+        <div
+          className={`${sidebarOpen ? "w-80" : "w-0"} 
+                    transition-all duration-300 
+                    bg-white border-r border-gray-200 
+                    flex flex-col overflow-y-auto`}
+        >
+          {/* Sidebar header */}
+          <div className="p-4 border-b border-gray-200 flex-shrink-0">
+            <div className="flex items-center justify-between mb-4">
+              <Button variant="ghost" size="sm" onClick={() => navigate("/courses")}>
+                <ArrowLeft size={16} className="mr-2" />
+                Back to Courses
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(false)}>×</Button>
             </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Progress</span>
-                <span className="font-medium">{getCourseProgress()}%</span>
+            <div className="mb-4">
+              <h1 className="text-lg font-semibold text-gray-900 mb-2">{course.title}</h1>
+              <div className="flex items-center space-x-2 text-sm text-gray-600 mb-3">
+                <span>by {course.instructorName}</span>
+                <Badge variant="info" size="sm">{course.level}</Badge>
               </div>
-              <Progress value={getCourseProgress()} size="sm" />
-              <div className="text-xs text-gray-500">
-                {completedChapterIds.length} of {chapters.length} chapters completed
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Progress</span>
+                  <span className="font-medium">{getCourseProgress()}%</span>
+                </div>
+                <Progress value={getCourseProgress()} size="sm" />
+                <div className="text-xs text-gray-500">
+                  {completedChapterIds.length} of {chapters.length} chapters completed
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-4 space-y-2">
-            <div className="border border-gray-200 rounded-lg">
-              <button
-                onClick={() => setExpanded((x) => !x)}
-                className="w-full p-3 text-left hover:bg-gray-50 transition-colors flex items-center justify-between"
-              >
-                <div className="flex-1">
-                  <h3 className="font-medium text-gray-900">Course Content</h3>
-                  <div className="flex items-center space-x-4 mt-1 text-sm text-gray-500">
-                    <span>{chapters.length} chapters</span>
-                    <span>{getCourseProgress()}% complete</span>
+
+          {/* Sidebar scrollable */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4 space-y-2">
+              {/* Chapters List */}
+              {chapters.map((chapter) => (
+                <button
+                  key={chapter.id}
+                  onClick={() => setCurrentChapter(chapter)}
+                  className={`w-full p-3 text-left hover:bg-gray-50 transition-colors flex items-center space-x-3 ${
+                    currentChapter?.id === chapter.id ? "bg-primary-50 border-r-2 border-primary-500" : ""
+                  }`}
+                >
+                  <div className="flex-shrink-0">
+                    {isChapterCompleted(chapter.id) ? (
+                      <CheckCircle size={16} className="text-green-500" />
+                    ) : (
+                      <div className="w-4 h-4 border-2 border-gray-300 rounded-full" />
+                    )}
                   </div>
-                </div>
-                {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-              </button>
-              {expanded && (
-                <div className="border-t border-gray-200">
-                  {chapters.map((chapter) => (
-                    <button
-                      key={chapter.id}
-                      onClick={() => setCurrentChapter(chapter)}
-                      className={`w-full p-3 text-left hover:bg-gray-50 transition-colors flex items-center space-x-3 ${
-                        currentChapter?.id === chapter.id ? "bg-primary-50 border-r-2 border-primary-500" : ""
-                      }`}
-                    >
-                      <div className="flex-shrink-0">
-                        {isChapterCompleted(chapter.id) ? (
-                          <CheckCircle size={16} className="text-green-500" />
-                        ) : (
-                          <div className="w-4 h-4 border-2 border-gray-300 rounded-full" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-medium text-gray-900 truncate">
-                          {chapter.title} {chapter.hasQuiz ? "(Quiz)" : ""}
-                        </h4>
-                        <div className="flex items-center space-x-2 text-xs text-gray-500">
-                          <Clock size={12} />
-                          <span>{chapter.duration}</span>
-                          <span>•</span>
-                          <span>{chapter.type}</span>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-medium text-gray-900 truncate">
+                      {chapter.title} {chapter.hasQuiz ? "(Quiz)" : ""}
+                    </h4>
+                    <div className="flex items-center space-x-2 text-xs text-gray-500">
+                      <Clock size={12} />
+                      <span>{chapter.duration}</span>
+                      <span>•</span>
+                      <span>{chapter.type}</span>
+                    </div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         </div>
+
+        {/* Main panel (independent scroll) */}
+        <div className="flex-1 overflow-y-auto bg-white" ref={mainPanelRef}>
+          {!currentChapter ? (
+            <EmptyPrompt />
+          ) : currentChapter.hasQuiz ? (
+            isQuizUnlocked(currentChapter) ? (
+              <QuizView
+                quiz={quiz}
+                quizLoading={quizLoading}
+                quizSubmitted={quizSubmitted}
+                quizScore={quizScore}
+                quizAnswers={quizAnswers}
+                onAnswerChange={handleAnswerChange}
+                onSubmit={submitQuiz}
+                completed={isChapterCompleted(currentChapter.id)}
+                // manual mark doesn't advance by default
+                onMarkComplete={() => markChapterComplete({ advance: false })}
+              />
+            ) : (
+              <LockedQuizNote />
+            )
+          ) : (
+            // pass onNextChapter and isLast
+            <TextChapterView
+              chapter={currentChapter}
+              completed={isChapterCompleted(currentChapter.id)}
+              onMarkComplete={() => markChapterComplete({ advance: false })}
+              onNextChapter={goToNextChapter}
+              isLast={chapters.findIndex((c) => c.id === currentChapter.id) === chapters.length - 1}
+            />
+          )}
+        </div>
       </div>
-
-      {/* Main panel */}
-    <div className="flex-1 flex flex-col">
-  <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-    {!sidebarOpen && (
-      <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(true)}>
-        <BookOpen size={16} className="mr-2" />
-        Course Content
-      </Button>
-    )}
-    {currentChapter && (
-      <div className="flex-1 text-center">
-        <h2 className="text-lg font-semibold text-gray-900">{currentChapter.title}</h2>
-        <p className="text-sm text-gray-600">{course.title}</p>
-      </div>
-    )}
-    <div className="w-16" />
-  </div>
-
-  <div className="flex-1 bg-white">
-    {!currentChapter ? (
-      <EmptyPrompt />
-    ) : currentChapter.hasQuiz ? (
-      // QUIZ VIEW — auto-unlocked
-      isQuizUnlocked(currentChapter) ? (
-        <QuizView
-          quiz={quiz}
-          quizLoading={quizLoading}
-          quizSubmitted={quizSubmitted}
-          quizScore={quizScore}
-          quizAnswers={quizAnswers}
-          onAnswerChange={handleAnswerChange}
-          onSubmit={submitQuiz}
-          completed={isChapterCompleted(currentChapter.id)}
-          onMarkComplete={() => markChapterComplete()}
-        />
-      ) : (
-        <LockedQuizNote />  
-      )
-    ) : (
-      // TEXT CHAPTER VIEW
-      <TextChapterView
-        chapter={currentChapter}
-        completed={isChapterCompleted(currentChapter.id)}
-        onMarkComplete={() => markChapterComplete()}
-      />
-    )}
-  </div>
-</div>
-
     </div>
   );
 };
-
-
 
 function EmptyPrompt() {
   return (
@@ -432,13 +442,19 @@ function LockedQuizNote() {
   );
 }
 
-
-function TextChapterView({ chapter, completed, onMarkComplete }) {
+/** TextChapterView: always shows both buttons.
+ *  - onMarkComplete: call to mark the current chapter complete
+ *  - onNextChapter: navigate to next chapter
+ *  - isLast: boolean, disables the Next button when true
+ */
+function TextChapterView({ chapter, completed, onMarkComplete, onNextChapter, isLast }) {
   return (
     <div className="max-w-3xl mx-auto p-6">
       <h3 className="text-2xl font-bold mb-4">{chapter.title}</h3>
       <div className="prose max-w-none">
-        <p className="whitespace-pre-line">{chapter.content || "Chapter content goes here."}</p>
+        <p className="whitespace-pre-line">
+          {chapter.content || "Chapter content goes here."}
+        </p>
       </div>
 
       {chapter.attachments && chapter.attachments.length > 0 && (
@@ -461,14 +477,18 @@ function TextChapterView({ chapter, completed, onMarkComplete }) {
         </div>
       )}
 
-      {!completed && (
-        <div className="mt-8">
-          <Button onClick={onMarkComplete}>
-            <CheckCircle size={16} className="mr-2" />
-            Mark as Complete
-          </Button>
-        </div>
-      )}
+      {/* Buttons Section - both always visible */}
+      <div className="mt-8 flex gap-4">
+        <Button onClick={onMarkComplete} disabled={!!completed}>
+          <CheckCircle size={16} className="mr-2" />
+          {completed ? "Completed" : "Mark as Complete"}
+        </Button>
+
+        {/* Next Chapter: disabled if this is the last chapter */}
+        <Button onClick={onNextChapter} disabled={isLast}>
+          Next Chapter →
+        </Button>
+      </div>
     </div>
   );
 }
@@ -511,7 +531,7 @@ function QuizView({
                 Submitted{quizScore ? ` • Score: ${quizScore.score}/${quizScore.max}` : ""}
               </div>
             )}
-            {/* keep manual complete button if needed */}
+            {/* manual mark (doesn't auto-advance) */}
             <Button variant="outline" onClick={onMarkComplete}>
               <CheckCircle size={16} className="mr-2" />
               Mark Chapter Complete
@@ -589,4 +609,3 @@ function QuestionBlock({ index, q, value, onChange, disabled }) {
 }
 
 export default CourseViewerPage;
-
