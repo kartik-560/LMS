@@ -5,8 +5,8 @@ const useAuthStore = create(
   persist(
     (set, get) => ({
       user: null,
-      token: null,
-      isAuthenticated: false,
+      token: localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token") || null,
+      isAuthenticated: !!(localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token")),
       userRole: null,
       
       login: (userData, token) => {
@@ -15,7 +15,7 @@ const useAuthStore = create(
           token,
           isAuthenticated: true,
           userRole: userData.role
-        })
+        });
       },
       
       logout: () => {
@@ -24,11 +24,13 @@ const useAuthStore = create(
           token: null,
           isAuthenticated: false,
           userRole: null
-        })
+        });
+        localStorage.removeItem("auth_token");
+        sessionStorage.removeItem("auth_token");
       },
       
       updateUser: (userData) => {
-        set({ user: userData })
+        set({ user: userData });
       },
       
       isStudent: () => get().userRole === 'student',
@@ -45,6 +47,7 @@ const useAuthStore = create(
       }),
     }
   )
-)
+);
+
 
 export default useAuthStore

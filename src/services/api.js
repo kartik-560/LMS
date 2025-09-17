@@ -1,9 +1,9 @@
-// src/services/api.js
 import axios from "axios";
 import useAuthStore from "../store/useAuthStore";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+// Fallback thumbnail for missing images
 export const FALLBACK_THUMB =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
@@ -14,28 +14,30 @@ export const FALLBACK_THUMB =
      </svg>`
   );
 
+// Headers for API calls, including authorization if token exists
 export const makeHeaders = () => {
   const token = useAuthStore.getState().token;
-  const h = {
+  const headers = {
     "Content-Type": "application/json",
     "Cache-Control": "no-cache",
     Pragma: "no-cache",
     Expires: "0",
   };
-  if (token) h.Authorization = `Bearer ${token}`;
-  return h;
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 };
 
+// Create an axios instance
 const api = axios.create({
   baseURL: `${API_BASE}/api`,
   headers: { "Content-Type": "application/json" },
 });
 
+// Request interceptor to attach token to every request if available
 api.interceptors.request.use((config) => {
-  // 1. Try Zustand
   let token = useAuthStore.getState().token;
 
-  // 2. Fallback to persisted storage
+  // Fallback to localStorage/sessionStorage if token is missing in Zustand
   if (!token) {
     token =
       localStorage.getItem("auth_token") ||
@@ -45,29 +47,32 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
-const AUTH_WHITELIST = ["/api/users/login", "/api/users/register"];
+// Response interceptor to handle 401 errors (token expired or invalid)
+const AUTH_WHITELIST = ["/api/auth/login", "/api/auth/register"];
 
 api.interceptors.response.use(
-  (res) => res,
+  (res) => res, // Pass the successful response
   (err) => {
     const status = err?.response?.status;
     const url = err?.config?.url || "";
 
     if (status === 401 && !AUTH_WHITELIST.some((p) => url.includes(p))) {
-      // clear auth
+      // Log out the user on token expiry or invalid token
       useAuthStore.getState().logout?.();
-      // avoid redirect loops
+      // Avoid redirect loops
       if (window.location.pathname !== "/login") {
         window.location.assign("/login");
       }
     }
-    return Promise.reject(err);
+    return Promise.reject(err); // Pass the error along
   }
 );
 
+// Utility function to convert file to base64 (for file uploads)
 export async function fileToBase64(file) {
   if (!file) return "";
   return await new Promise((resolve, reject) => {
@@ -78,39 +83,91 @@ export async function fileToBase64(file) {
   });
 }
 
+// Auth-related API calls
 export const authAPI = {
-  register: (payload) => api.post("/users/register", payload),
+  // Register a user
+  register: (payload) => api.post("/auth/registrations", payload),
 
-  registerBulk: (formData) =>
-    api.post("/users/register-bulk", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    }),
+  // Standard login (with username and password)
+  login: async (payload) => {
+    try {
+      const response = await api.post("/auth/login", payload);
+      const { token, user } = response.data.data;
 
-  firstLoginSetPassword: (payload) =>
-    api.post("/users/first-login/set-password", payload),
+      // Store token in localStorage and sessionStorage
+      localStorage.setItem("auth_token", token);
+      sessionStorage.setItem("auth_token", token);
 
-  login: (payload) => api.post("/users/login", payload),
+      // Update Zustand store with token
+      useAuthStore.getState().setToken(token);
 
-  me: () => api.get("/users/me"),
+      return { success: true, user, token };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || "Login failed",
+      };
+    }
+  },
 
-  completeFirstLogin: (body, token) =>
-    axios.patch("/users/first-login", body, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  // NEW helper for invite-based registration
-  inviteUser: ({ fullName, email, role, year, branch, mobile }) =>
-    api.post("/users/register", {
-      fullName,
-      email,
-      role: role?.toUpperCase() || "STUDENT",
-      year,
-      branch,
-      mobile,
-      sendInvite: true,
-    }),
-    
+  // OTP - Step 1: Request OTP
+  loginOtpBegin: async (payload) => {
+    try {
+      const response = await api.post("/auth/signup/begin", payload);
+      return response.data;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || "Failed to send OTP",
+      };
+    }
+  },
+
+  // OTP - Step 2: Verify OTP
+  loginOtpVerify: async (email, otp) => {
+    try {
+      return await api
+        .post("/auth/signup/verify", { email, otp })
+        .then((response) => response.data);
+      const token = response.data.token;
+
+      // Store token in localStorage and sessionStorage
+      localStorage.setItem("auth_token", token);
+      sessionStorage.setItem("auth_token", token);
+
+      // Update Zustand store with token
+      // useAuthStore.getState().setToken(token);
+
+      return { success: true, token };
+    } catch (error) {
+      console.error("OTP verification failed:", error);
+      return {
+        success: false,
+        message: error.response?.data?.message || "Invalid OTP",
+      };
+    }
+  },
+
+  me: () => api.get("/auth/me"),
+
+  logout: () => {
+    useAuthStore.getState().logout();
+
+    localStorage.removeItem("auth_token");
+    sessionStorage.removeItem("auth_token");
+
+    // Redirect to login page
+    window.location.href = "/login";
+  },
+
+  // Optional: Check if user is logged in
+  isAuthenticated: () => {
+    const token =
+      localStorage.getItem("auth_token") ||
+      sessionStorage.getItem("auth_token");
+    return token ? true : false;
+  },
 };
-
 
 export const coursesAPI = {
   list: (params = {}) => api.get("/courses", { params }),
@@ -196,14 +253,14 @@ export const progressAPI = {
   completedChapters: (courseId) =>
     api.get(`/progress/course/${courseId}/completed`),
   courseSummary: (courseId) => api.get(`/progress/course/${courseId}/summary`),
-   dashboard: () => api.get(`/progress/dashboard`),
+  dashboard: () => api.get(`/progress/dashboard`),
 };
 
 export const adminAPI = {
   overview: () => api.get("/admin/overview"),
   courses: () => api.get("/admin/courses"),
-  students: () => api.get("/admin/students"),        
-  instructors: () => api.get("/admin/instructors"),    
+  students: () => api.get("/admin/students"),
+  instructors: () => api.get("/admin/instructors"),
   setInstructorPermissions: (id, payload) =>
     api.patch(`/admin/instructors/${id}/permissions`, payload),
 };
