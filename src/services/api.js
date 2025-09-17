@@ -169,16 +169,6 @@ export const authAPI = {
   },
 };
 
-export const coursesAPI = {
-  list: (params = {}) => api.get("/courses", { params }),
-  get: (id) => api.get(`/courses/${id}`),
-  create: (payload) => api.post("/courses", payload),
-  createFull: (payload) => api.post("/courses/full", payload),
-  update: (id, payload) => api.patch(`/courses/${id}`, payload),
-  setInstructors: (id, instructorIds) =>
-    api.post(`/courses/${id}/instructors`, { instructorIds }),
-  listForMeAsInstructor: () => api.get("/courses/me/list"),
-};
 
 export const chaptersAPI = {
   listByCourse: (courseId) => api.get("/chapters", { params: { courseId } }),
@@ -230,11 +220,6 @@ export const enrollmentRequestsAPI = {
 
 export const instructorsAPI = {
   list: () => api.get("/courses/instructors-list"),
-};
-
-export const courseInstructorsAPI = {
-  setForCourse: (courseId, instructorIds) =>
-    api.post(`/courses/${courseId}/instructors`, { instructorIds }),
 };
 
 export const assessmentsAPI = {
