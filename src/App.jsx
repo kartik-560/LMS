@@ -17,7 +17,8 @@ import Terms from "./pages/TermsPage";
 import Privacy from "./pages/PrivacyPage";
 import EditCoursePage from "./pages/EditCoursePage";
 import FirstLoginPage from "./pages/FirstLoginPage";
-import { useEffect } from "react";
+import { useEffect } from "react";import { GoogleOAuthProvider } from "@react-oauth/google";
+
 // Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { isAuthenticated, userRole } = useAuthStore();
