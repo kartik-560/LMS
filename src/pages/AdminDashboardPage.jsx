@@ -17,6 +17,7 @@ import {
   Plus,
   Download,
   X,
+  Check,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -425,12 +426,28 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            <Link to="/register" state={{ allowWhenLoggedIn: true }}>
-              <Button size="sm" className="w-full sm:w-auto">
-                <Plus size={16} className="mr-2" />
-                Add User
-              </Button>
-            </Link>
+            <div className="flex flex-wrap gap-2 sm:gap-3">
+              <Link to="/add-college">
+                <Button size="sm" className="w-full sm:w-auto">
+                  <Plus size={16} className="mr-2" />
+                  Add College
+                </Button>
+              </Link>
+
+              <Link to="/create">
+                <Button size="sm" className="w-full sm:w-auto">
+                  <Plus size={16} className="mr-2" />
+                  Create Course
+                </Button>
+              </Link>
+
+              <Link to="/register" state={{ allowWhenLoggedIn: true }}>
+                <Button size="sm" className="w-full sm:w-auto">
+                  <Plus size={16} className="mr-2" />
+                  Add User
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -661,164 +678,100 @@ export default function AdminDashboardPage() {
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
-
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
-                {selectedUsers.length > 0 && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        selectedUsers.forEach((id) =>
-                          handleUserAction(id, "activate")
-                        )
-                      }
-                      className="w-full sm:w-auto"
-                    >
-                      <UserCheck size={16} className="mr-1" />
-                      <span className="hidden sm:inline">Activate ({selectedUsers.length})</span>
-                      <span className="sm:hidden">Activate</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        selectedUsers.forEach((id) =>
-                          handleUserAction(id, "deactivate")
-                        )
-                      }
-                      className="w-full sm:w-auto"
-                    >
-                      <UserX size={16} className="mr-1" />
-                      Deactivate
-                    </Button>
-                  </>
-                )}
-              </div>
             </div>
 
-            <Card>
-              <Card.Content className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr>
-                        <th className="px-3 sm:px-6 py-3 text-left">
-                          <input
-                            type="checkbox"
-                            onChange={(e) =>
-                              setSelectedUsers(
-                                e.target.checked
-                                  ? filteredInstructors.map((u) => u.id)
-                                  : []
-                              )
-                            }
-                            className="rounded border-gray-300"
-                          />
-                        </th>
-                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Instructor
-                        </th>
-                        <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Courses
-                        </th>
-                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Last Login
-                        </th>
-                        <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredInstructors.map((i) => (
-                        <tr key={i.id} className="hover:bg-gray-50">
-                          <td className="px-3 sm:px-6 py-4">
-                            <input
-                              type="checkbox"
-                              checked={selectedUsers.includes(i.id)}
-                              onChange={() => toggleUserSelection(i.id)}
-                              className="rounded border-gray-300"
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Instructor
+                      </th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Courses Assigned
+                      </th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Course Names
+                      </th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Last Login
+                      </th>
+                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredInstructors.map((instructor) => (
+                      <tr key={instructor.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <img
+                              src={instructor.avatar}
+                              alt={instructor.fullName}
+                              className="w-9 h-9 rounded-full mr-3"
                             />
-                          </td>
-                          <td className="px-3 sm:px-6 py-4">
-                            <div className="flex items-center">
-                              <img
-                                src={i.avatar}
-                                alt={i.fullName}
-                                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full mr-2 sm:mr-3"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="text-sm font-medium text-gray-900 truncate">
-                                  {i.fullName}
-                                </div>
-                                <div className="text-sm text-gray-500 truncate">
-                                  {i.email}
-                                </div>
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                {instructor.fullName}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {instructor.email}
                               </div>
                             </div>
-                          </td>
-                          <td className="hidden sm:table-cell px-6 py-4 text-sm text-gray-900">
-                            {/* Prefer backend value if present; otherwise derive */}
-                            {i.assignedCourses?.length ??
-                              instructorCourseIndex[i.id]?.count ??
-                              0}
-                          </td>
-                          <td className="px-3 sm:px-6 py-4">
-                            <Badge
-                              variant={i.isActive ? "success" : "danger"}
-                              size="sm"
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            instructor.isActive 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {instructor.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 text-blue-700 text-sm font-medium">
+                            {instructor.assignedCourses?.length || 0}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          No Course
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
+                          {fmtDate(instructor.lastLogin)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => handleUserAction(instructor.id, "edit")}
+                              className="text-blue-600 hover:text-blue-900"
+                              title="Edit"
                             >
-                              {i.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                          </td>
-                          <td className="hidden lg:table-cell px-6 py-4 text-sm text-gray-500">
-                            {fmtDate(i.lastLogin)}
-                          </td>
-                          <td className="px-3 sm:px-6 py-4 text-right text-sm font-medium">
-                            <div className="flex items-center justify-end space-x-1 sm:space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleUserAction(i.id, "view")}
-                              >
-                                <Eye size={16} />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleUserAction(i.id, "edit")}
-                              >
-                                <Edit size={16} />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  handleUserAction(
-                                    i.id,
-                                    i.isActive ? "deactivate" : "activate"
-                                  )
-                                }
-                              >
-                                {i.isActive ? (
-                                  <UserX size={16} />
-                                ) : (
-                                  <UserCheck size={16} />
-                                )}
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card.Content>
-            </Card>
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleUserAction(
+                                instructor.id,
+                                instructor.isActive ? "deactivate" : "activate"
+                              )}
+                              className={`${instructor.isActive ? 'text-green-600 hover:text-green-900' : 'text-red-600 hover:text-red-900'}`}
+                              title={instructor.isActive ? 'Deactivate' : 'Activate'}
+                            >
+                              {instructor.isActive ? <Check size={16} /> : <X size={16} />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
@@ -886,144 +839,90 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            <Card>
-              <Card.Content className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr>
-                        <th className="px-3 sm:px-6 py-3 text-left">
-                          <input
-                            type="checkbox"
-                            onChange={(e) =>
-                              setSelectedUsers(
-                                e.target.checked
-                                  ? filteredStudents.map((u) => u.id)
-                                  : []
-                              )
-                            }
-                            className="rounded border-gray-300"
-                          />
-                        </th>
-                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Student
-                        </th>
-                        <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Courses
-                        </th>
-                        <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Progress
-                        </th>
-                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Last Login
-                        </th>
-                        <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredStudents.map((s) => {
-                        const avgProgress = 0; // placeholder
-                        return (
-                          <tr key={s.id} className="hover:bg-gray-50">
-                            <td className="px-3 sm:px-6 py-4">
-                              <input
-                                type="checkbox"
-                                checked={selectedUsers.includes(s.id)}
-                                onChange={() => toggleUserSelection(s.id)}
-                                className="rounded border-gray-300"
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Student
+                      </th>
+                      <th className="px-6 py-3 pl-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Course
+                      </th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Enrolled
+                      </th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Final Tests
+                      </th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Interviews
+                      </th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                        Certifications
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredStudents.map((s) => {
+                      const finalTests = Math.floor(Math.random() * 5);
+                      const interviews = Math.floor(Math.random() * 5);
+                      const certifications = Math.floor(Math.random() * 5);
+                      
+                      return (
+                        <tr key={s.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <img
+                                src={s.avatar}
+                                alt={s.fullName}
+                                className="w-9 h-9 rounded-full mr-3"
                               />
-                            </td>
-                            <td className="px-3 sm:px-6 py-4">
-                              <div className="flex items-center">
-                                <img
-                                  src={s.avatar}
-                                  alt={s.fullName}
-                                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-full mr-2 sm:mr-3"
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-sm font-medium text-gray-900 truncate">
-                                    {s.fullName}
-                                  </div>
-                                  <div className="text-sm text-gray-500 truncate">
-                                    {s.email}
-                                  </div>
+                              <div>
+                                <div className="font-medium text-gray-900">
+                                  {s.fullName}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  {s.email}
                                 </div>
                               </div>
-                            </td>
-                            <td className="hidden sm:table-cell px-6 py-4 text-sm text-gray-900">
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-left">
+                            {s.assignedCourses?.length > 0 
+                              ? (['c1', 'c2'].some(course => s.assignedCourses.includes(course)) 
+                                  ? <span className="text-gray-500">No Course</span>
+                                  : <span className="text-gray-900">{s.assignedCourses.join(', ')}</span>)
+                              : <span className="text-gray-500">No Course</span>}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 text-blue-700 text-sm font-medium">
                               {s.assignedCourses?.length || 0}
-                            </td>
-                            <td className="hidden md:table-cell px-6 py-4">
-                              <div className="flex items-center space-x-2">
-                                <div className="w-12 sm:w-16 bg-gray-200 rounded-full h-2">
-                                  <div
-                                    className="bg-primary-600 h-2 rounded-full"
-                                    style={{ width: `${avgProgress}%` }}
-                                  />
-                                </div>
-                                <span className="text-sm text-gray-600 whitespace-nowrap">
-                                  {Math.round(avgProgress)}%
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-3 sm:px-6 py-4">
-                              <Badge
-                                variant={s.isActive ? "success" : "danger"}
-                                size="sm"
-                              >
-                                {s.isActive ? "Active" : "Inactive"}
-                              </Badge>
-                            </td>
-                            <td className="hidden lg:table-cell px-6 py-4 text-sm text-gray-500">
-                              {fmtDate(s.lastLogin)}
-                            </td>
-                            <td className="px-3 sm:px-6 py-4 text-right text-sm font-medium">
-                              <div className="flex items-center justify-end space-x-1 sm:space-x-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleUserAction(s.id, "view")}
-                                >
-                                  <Eye size={16} />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleUserAction(s.id, "edit")}
-                                >
-                                  <Edit size={16} />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    handleUserAction(
-                                      s.id,
-                                      s.isActive ? "deactivate" : "activate"
-                                    )
-                                  }
-                                >
-                                  {s.isActive ? (
-                                    <UserX size={16} />
-                                  ) : (
-                                    <UserCheck size={16} />
-                                  )}
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </Card.Content>
-            </Card>
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <span className="text-blue-700 font-medium">
+                              {finalTests}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <span className="text-green-600 font-medium">
+                              {interviews}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <span className="text-purple-600 font-medium">
+                              {certifications}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1118,7 +1017,7 @@ export default function AdminDashboardPage() {
                       <span>{course.studentCount} students</span>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                    <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
                       <Button
                         variant="outline"
                         size="sm"
@@ -1335,4 +1234,3 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-

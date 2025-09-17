@@ -1132,15 +1132,15 @@ const InstructorDashboardPage = () => {
                   Manage your courses and track student progress.
                 </p>
 
-                <Button
+                {/* <Button
                   className="ml-auto"
                   onClick={() => navigate("/first-login")}
                 >
                   Go to First Login
-                </Button>
+                </Button> */}
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+            {/* <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
               <Button
                 variant="outline"
                 className="w-full sm:w-auto"
@@ -1155,7 +1155,7 @@ const InstructorDashboardPage = () => {
                   Create Course
                 </Button>
               </Link>
-            </div>
+            </div> */}
           </div>
         </div>
 
@@ -1245,7 +1245,7 @@ const InstructorDashboardPage = () => {
               <Card.Header className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
                 <Card.Title>My Courses</Card.Title>
                 <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                  <Button
+                  {/* <Button
                     size="sm"
                     variant="outline"
                     className="w-full sm:w-auto"
@@ -1263,7 +1263,7 @@ const InstructorDashboardPage = () => {
                       <Plus size={16} className="mr-2" />
                       Create Course
                     </Button>
-                  </Link>
+                  </Link> */}
                 </div>
               </Card.Header>
               <Card.Content>

@@ -14,7 +14,7 @@ import {
   Trophy,
   BarChart3,
   PlayCircle,
-  BookMarked, // kept if you want later; not used now
+  BookMarked,
   GraduationCap,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -354,17 +354,16 @@ const StudentDashboardPage = () => {
               <p className="text-sm sm:text-base text-gray-600">
                 Continue your learning journey and unlock new opportunities.
               </p>
- <Button
-          className="ml-auto"
-          onClick={() => navigate("/first-login")}
-        >
-          Go to First Login
-        </Button>
+              <Button
+                className="ml-auto"
+                onClick={() => navigate("/first-login")}
+              >
+                Go to First Login
+              </Button>
             </div>
           </div>
         </div>
 
-        {/* Stats (removed Modules card) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-6 mb-8">
           <Card className="p-6">
             <div className="flex items-center">
@@ -505,16 +504,14 @@ const StudentDashboardPage = () => {
 
                             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                               <Button
-                                size="sm"
-                                variant="outline"
-                                className="w-full sm:w-auto"
+                                className="flex-1"
                                 onClick={() => {
-                                  setSelectedCourse(course);
-                                  setShowCourseModal(true);
+                                  setShowCourseModal(false);
+                                  goToCourse(selectedCourse.id);
                                 }}
                               >
-                                <BarChart3 size={16} className="mr-1" />
-                                Details
+                                <PlayCircle size={16} className="mr-2" />
+                                Continue Learning
                               </Button>
                               <Button
                                 size="sm"

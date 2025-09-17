@@ -635,7 +635,7 @@ const CourseCard = ({
         <div className="absolute top-3 right-3 flex space-x-2">
           <button
             onClick={onToggleFavorite}
-            className={`p-2 rounded-full backdrop-blur-sm transition-colors ${isFavorite ? "bg-red-500 text-white" : "bg-white/80 text-gray-600 hover:bg-white"}`}
+            className={`p-2 rounded-full backdrop -blur-sm transition-colors ${isFavorite ? "bg-red-500 text-white" : "bg-white/80 text-gray-600 hover:bg-white"}`}
             aria-label="Toggle favorite"
           >
             <Heart size={16} className={isFavorite ? "fill-current" : ""} />

@@ -14,7 +14,7 @@ import api, {
   uploadsAPI,
   instructorsAPI,
   courseInstructorsAPI,
-  assessmentsAPI, // 👈 ensure this is exported from services/api
+  assessmentsAPI,
 } from "../services/api";
 
 const emptyQuizQuestion = () => ({
@@ -74,7 +74,7 @@ export default function CreateCoursePage() {
       try {
         if (token)
           api.defaults.headers.common.Authorization = `Bearer ${token}`;
-        const { data } = await instructorsAPI.list(); // GET /courses/instructors-list (baseURL should already include /api)
+        const { data } = await instructorsAPI.list();
         setInstructorOptions(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error("Failed to load instructors:", e);
@@ -83,25 +83,14 @@ export default function CreateCoursePage() {
     })();
   }, [isAdmin, token]);
 
-  const [lessons, setLessons] = useState([
-    {
-      id: 1,
-      type: "text",
-      title: "",
-      content: "",
-      pdfFile: null,
-      quizTitle: "",
-      quizDurationMinutes: "",
-      questions: [emptyQuizQuestion()],
-    },
-  ]);
+  const [lessons, setLessons] = useState([]);
 
-  const addLesson = () => {
+  const addLesson = (type = "text") => {
     setLessons((prev) => [
       ...prev,
       {
         id: Date.now(),
-        type: "text",
+        type,
         title: "",
         content: "",
         pdfFile: null,
@@ -122,7 +111,7 @@ export default function CreateCoursePage() {
 
   const removeLesson = (id) => {
     setLessons((prev) =>
-      prev.length > 1 ? prev.filter((l) => l.id !== id) : prev
+      prev.length > 1 ? prev.filter((l) => l.id !== id) : []
     );
   };
   const updateLesson = (id, field, value) => {
@@ -255,9 +244,7 @@ export default function CreateCoursePage() {
             const correct = filled.filter((o) => o.correct).length;
             if (q.type === "single" && correct !== 1) {
               toast.error(
-                `Question ${j + 1} in Chapter ${
-                  i + 1
-                }: exactly 1 correct option`
+                `Question ${j + 1} in Chapter ${i + 1}: exactly 1 correct option`
               );
               return false;
             }
@@ -271,9 +258,7 @@ export default function CreateCoursePage() {
           if (q.type === "numerical") {
             if (!q.correctText?.trim()) {
               toast.error(
-                `Question ${j + 1} in Chapter ${
-                  i + 1
-                }: correct answer is required`
+                `Question ${j + 1} in Chapter ${i + 1}: correct answer is required`
               );
               return false;
             }
@@ -284,9 +269,7 @@ export default function CreateCoursePage() {
             );
             if (validPairs.length < 1) {
               toast.error(
-                `Question ${j + 1} in Chapter ${
-                  i + 1
-                }: add at least one valid pair`
+                `Question ${j + 1} in Chapter ${i + 1}: add at least one valid pair`
               );
               return false;
             }
@@ -382,7 +365,7 @@ export default function CreateCoursePage() {
       const coursePayload = {
         title: data.title,
         thumbnail: thumbnailUrl,
-        status: "published", // or "draft"
+        status: "published",
         category: data.category,
         description: data.description,
         managerId: null,
@@ -443,7 +426,6 @@ export default function CreateCoursePage() {
       else if (isAdminOnly) navigate("/admin");
       else if (roleNorm === "INSTRUCTOR") navigate("/instructor");
       else navigate("/");
-    
     } catch (err) {
       console.error("CreateCourse error:", err);
       toast.error(
@@ -586,453 +568,468 @@ export default function CreateCoursePage() {
               )}
 
               <ImagePicker
-                onFileAsBase64={(dataUrl) => setBase64DataUrl(dataUrl)}
+                onFileAsBase64={(dataUrl) => {
+                  setBase64DataUrl(dataUrl);
+                  setCourseImage(dataUrl);
+                }}
               />
             </div>
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Course Content
-                </h2>
-                <Button type="button" onClick={addLesson} variant="outline">
-                  <Plus size={16} className="mr-2" />
-                  Add Chapter
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {lessons.map((lesson, idx) => (
-                  <div
-                    key={lesson.id}
-                    className="border border-gray-200 rounded-lg p-4"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      {lesson.type === "text" ? (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Chapter Title
-                          </label>
-                          <input
-                            type="text"
-                            value={lesson.title}
-                            onChange={(e) =>
-                              updateLesson(lesson.id, "title", e.target.value)
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                            placeholder={`Chapter ${idx + 1}`}
-                          />
-                        </div>
-                      ) : (
-                        <div className="hidden md:block" />
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Type
-                        </label>
-                        <select
-                          value={lesson.type}
-                          onChange={(e) =>
-                            updateLesson(lesson.id, "type", e.target.value)
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        >
-                          <option value="text">Text & PDF</option>
-                          <option value="test">Test (Quiz)</option>
-                        </select>
-                      </div>
-
-                      <div className="hidden md:block" />
-                      <div className="flex items-end">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => removeLesson(lesson.id)}
-                          disabled={lessons.length === 1}
-                          className="w-full"
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {lesson.type === "text" ? (
-                      <div className="mt-4 space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Chapter Content
-                          </label>
-                          <textarea
-                            rows={3}
-                            value={lesson.content}
-                            onChange={(e) =>
-                              updateLesson(lesson.id, "content", e.target.value)
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                            placeholder="Describe what this lesson covers..."
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Upload PDF (Optional)
-                          </label>
-                          <input
-                            type="file"
-                            accept="application/pdf"
-                            onChange={(e) =>
-                              updateLesson(
-                                lesson.id,
-                                "pdfFile",
-                                e.target.files[0]
-                              )
-                            }
-                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-                          />
-                          {lesson.pdfFile && (
-                            <p className="mt-2 text-sm text-gray-600">
-                              Selected: {lesson.pdfFile.name}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="mt-4 space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="md:col-span-2">
+            {/* Lessons List */}
+            {lessons.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="space-y-4">
+                  {lessons.map((lesson, idx) => (
+                    <div
+                      key={lesson.id}
+                      className="border border-gray-200 rounded-lg p-4"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        {lesson.type === "text" ? (
+                          <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Quiz Title
+                              Chapter Title
                             </label>
                             <input
                               type="text"
-                              value={lesson.quizTitle}
+                              value={lesson.title}
+                              onChange={(e) =>
+                                updateLesson(lesson.id, "title", e.target.value)
+                              }
+                              required
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              placeholder={`Chapter ${idx + 1}`}
+                            />
+                          </div>
+                        ) : lesson.type === "test" ? (
+                          <div className="hidden md:block" />
+                        ) : null}
+
+                        {lesson.type === "text" && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Type
+                            </label>
+                            <select
+                              value={lesson.type}
+                              onChange={(e) =>
+                                updateLesson(lesson.id, "type", e.target.value)
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            >
+                              <option value="text">Text & PDF</option>
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="hidden md:block" />
+                        <div className="flex items-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => removeLesson(lesson.id)}
+                            disabled={lessons.length === 1}
+                            className="w-full"
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {lesson.type === "text" ? (
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Chapter Content
+                            </label>
+                            <textarea
+                              rows={3}
+                              value={lesson.content}
                               onChange={(e) =>
                                 updateLesson(
                                   lesson.id,
-                                  "quizTitle",
+                                  "content",
                                   e.target.value
                                 )
                               }
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                              placeholder="e.g., Chapter 1 Quiz"
+                              placeholder="Describe what this lesson covers..."
                             />
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Duration (minutes)
+                              Upload PDF (Optional)
                             </label>
                             <input
-                              type="number"
-                              min="1"
-                              value={lesson.quizDurationMinutes}
+                              type="file"
+                              accept="application/pdf"
                               onChange={(e) =>
                                 updateLesson(
                                   lesson.id,
-                                  "quizDurationMinutes",
-                                  e.target.value
+                                  "pdfFile",
+                                  e.target.files[0]
                                 )
                               }
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                              placeholder="30"
+                              className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
                             />
+                            {lesson.pdfFile && (
+                              <p className="mt-2 text-sm text-gray-600">
+                                Selected: {lesson.pdfFile.name}
+                              </p>
+                            )}
                           </div>
                         </div>
+                      ) : (
+                        <div className="mt-4 space-y-6">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="md:col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Quiz Title
+                              </label>
+                              <input
+                                type="text"
+                                value={lesson.quizTitle}
+                                onChange={(e) =>
+                                  updateLesson(
+                                    lesson.id,
+                                    "quizTitle",
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                placeholder="e.g., Chapter 1 Quiz"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Duration (minutes)
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={lesson.quizDurationMinutes}
+                                onChange={(e) =>
+                                  updateLesson(
+                                    lesson.id,
+                                    "quizDurationMinutes",
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                placeholder="30"
+                              />
+                            </div>
+                          </div>
 
-                        <div className="space-y-4">
-                          {lesson.questions.map((q, qIdx) => (
-                            <div
-                              key={q.id}
-                              className="rounded-lg border border-gray-200 p-4"
-                            >
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="font-medium text-gray-900">
-                                  Question {qIdx + 1}
-                                </h4>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() =>
-                                    removeQuestion(lesson.id, q.id)
-                                  }
-                                  disabled={lesson.questions.length === 1}
-                                >
-                                  <Trash2 size={14} />
-                                </Button>
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Type
-                                  </label>
-                                  <select
-                                    value={q.type}
-                                    onChange={(e) =>
-                                      updateQuestion(
-                                        lesson.id,
-                                        q.id,
-                                        "type",
-                                        e.target.value
-                                      )
+                          <div className="space-y-4">
+                            {lesson.questions.map((q, qIdx) => (
+                              <div
+                                key={q.id}
+                                className="rounded-lg border border-gray-200 p-4"
+                              >
+                                <div className="flex items-center justify-between mb-3">
+                                  <h4 className="font-medium text-gray-900">
+                                    Question {qIdx + 1}
+                                  </h4>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                      removeQuestion(lesson.id, q.id)
                                     }
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                    disabled={lesson.questions.length === 1}
                                   >
-                                    <option value="single">
-                                      Single Correct Option
-                                    </option>
-                                    <option value="multiple">
-                                      Multiple Correct Options
-                                    </option>
-                                    <option value="numerical">
-                                      Numerical/Fill in the Blank
-                                    </option>
-                                    <option value="match">
-                                      Match the Column
-                                    </option>
-                                    <option value="subjective">
-                                      Subjective
-                                    </option>
-                                  </select>
+                                    <Trash2 size={14} />
+                                  </Button>
                                 </div>
 
-                                <div className="md:col-span-2">
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Question
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={q.text}
-                                    onChange={(e) =>
-                                      updateQuestion(
-                                        lesson.id,
-                                        q.id,
-                                        "text",
-                                        e.target.value
-                                      )
-                                    }
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                    placeholder="Enter question"
-                                  />
-                                </div>
-                              </div>
-
-                              {q.type === "single" || q.type === "multiple" ? (
-                                <div className="mt-4">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <label className="block text-sm font-medium text-gray-700">
-                                      Options (mark correct)
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Type
                                     </label>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      onClick={() => addOption(lesson.id, q.id)}
+                                    <select
+                                      value={q.type}
+                                      onChange={(e) =>
+                                        updateQuestion(
+                                          lesson.id,
+                                          q.id,
+                                          "type",
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                                     >
-                                      <Plus size={14} className="mr-1" />
-                                      Add Option
-                                    </Button>
+                                      <option value="single">
+                                        Single Correct Option
+                                      </option>
+                                      <option value="multiple">
+                                        Multiple Correct Options
+                                      </option>
+                                      <option value="numerical">
+                                        Numerical/Fill in the Blank
+                                      </option>
+                                      <option value="match">
+                                        Match the Column
+                                      </option>
+                                      <option value="subjective">
+                                        Subjective
+                                      </option>
+                                    </select>
                                   </div>
 
-                                  <div className="space-y-2">
-                                    {q.options.map((o) => (
+                                  <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Question
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={q.text}
+                                      onChange={(e) =>
+                                        updateQuestion(
+                                          lesson.id,
+                                          q.id,
+                                          "text",
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                      placeholder="Enter question"
+                                    />
+                                  </div>
+                                </div>
+
+                                {q.type === "single" || q.type === "multiple" ? (
+                                  <div className="mt-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-medium text-gray-700">
+                                        Options (mark correct)
+                                      </label>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => addOption(lesson.id, q.id)}
+                                      >
+                                        <Plus size={14} className="mr-1" />
+                                        Add Option
+                                      </Button>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      {q.options.map((o) => (
+                                        <div
+                                          key={o.id}
+                                          className="grid grid-cols-[24px_1fr_32px] gap-3 items-center"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            className="h-4 w-4"
+                                            checked={o.correct}
+                                            onChange={(e) =>
+                                              updateOption(
+                                                lesson.id,
+                                                q.id,
+                                                o.id,
+                                                "correct",
+                                                e.target.checked
+                                              )
+                                            }
+                                          />
+                                          <input
+                                            type="text"
+                                            value={o.text}
+                                            onChange={(e) =>
+                                              updateOption(
+                                                lesson.id,
+                                                q.id,
+                                                o.id,
+                                                "text",
+                                                e.target.value
+                                              )
+                                            }
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                            placeholder="Option text"
+                                          />
+                                          <button
+                                            type="button"
+                                            className="text-red-500 hover:text-red-600"
+                                            onClick={() =>
+                                              removeOption(lesson.id, q.id, o.id)
+                                            }
+                                            title="Remove option"
+                                          >
+                                            <Trash2 size={16} />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : q.type === "numerical" ? (
+                                  <div className="mt-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Correct Answer (text/number)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={q.correctText || ""}
+                                      onChange={(e) =>
+                                        updateQuestion(
+                                          lesson.id,
+                                          q.id,
+                                          "correctText",
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                      placeholder="e.g., 42 or 'HyperText Markup Language'"
+                                    />
+                                  </div>
+                                ) : q.type === "match" ? (
+                                  <div className="mt-4 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <label className="block text-sm font-medium text-gray-700">
+                                        Match Pairs (Left ↔ Right)
+                                      </label>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() =>
+                                          updateQuestion(
+                                            lesson.id,
+                                            q.id,
+                                            "pairs",
+                                            [
+                                              ...(q.pairs || []),
+                                              {
+                                                id: crypto.randomUUID(),
+                                                left: "",
+                                                right: "",
+                                              },
+                                            ]
+                                          )
+                                        }
+                                      >
+                                        <Plus size={14} className="mr-1" />
+                                        Add Pair
+                                      </Button>
+                                    </div>
+
+                                    {(q.pairs || []).map((p) => (
                                       <div
-                                        key={o.id}
-                                        className="grid grid-cols-[24px_1fr_32px] gap-3 items-center"
+                                        key={p.id}
+                                        className="grid grid-cols-[1fr_1fr_auto] gap-3 items-center"
                                       >
                                         <input
-                                          type="checkbox"
-                                          className="h-4 w-4"
-                                          checked={o.correct}
-                                          onChange={(e) =>
-                                            updateOption(
-                                              lesson.id,
-                                              q.id,
-                                              o.id,
-                                              "correct",
-                                              e.target.checked
-                                            )
-                                          }
-                                        />
-                                        <input
                                           type="text"
-                                          value={o.text}
+                                          value={p.left}
                                           onChange={(e) =>
-                                            updateOption(
+                                            updateQuestion(
                                               lesson.id,
                                               q.id,
-                                              o.id,
-                                              "text",
-                                              e.target.value
+                                              "pairs",
+                                              (q.pairs || []).map((x) =>
+                                                x.id === p.id
+                                                  ? { ...x, left: e.target.value }
+                                                  : x
+                                              )
                                             )
                                           }
                                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                          placeholder="Option text"
+                                          placeholder="Left"
+                                        />
+                                        <input
+                                          type="text"
+                                          value={p.right}
+                                          onChange={(e) =>
+                                            updateQuestion(
+                                              lesson.id,
+                                              q.id,
+                                              "pairs",
+                                              (q.pairs || []).map((x) =>
+                                                x.id === p.id
+                                                  ? {
+                                                      ...x,
+                                                      right: e.target.value,
+                                                    }
+                                                  : x
+                                              )
+                                            )
+                                          }
+                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                          placeholder="Right"
                                         />
                                         <button
                                           type="button"
                                           className="text-red-500 hover:text-red-600"
                                           onClick={() =>
-                                            removeOption(lesson.id, q.id, o.id)
+                                            updateQuestion(
+                                              lesson.id,
+                                              q.id,
+                                              "pairs",
+                                              (q.pairs || []).filter(
+                                                (x) => x.id !== p.id
+                                              )
+                                            )
                                           }
-                                          title="Remove option"
+                                          title="Remove pair"
                                         >
                                           <Trash2 size={16} />
                                         </button>
                                       </div>
                                     ))}
                                   </div>
-                                </div>
-                              ) : q.type === "numerical" ? (
-                                <div className="mt-4">
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Correct Answer (text/number)
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={q.correctText || ""}
-                                    onChange={(e) =>
-                                      updateQuestion(
-                                        lesson.id,
-                                        q.id,
-                                        "correctText",
-                                        e.target.value
-                                      )
-                                    }
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                    placeholder="e.g., 42 or 'HyperText Markup Language'"
-                                  />
-                                </div>
-                              ) : q.type === "match" ? (
-                                <div className="mt-4 space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <label className="block text-sm font-medium text-gray-700">
-                                      Match Pairs (Left ↔ Right)
+                                ) : (
+                                  <div className="mt-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Sample Answer (optional)
                                     </label>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      onClick={() =>
+                                    <textarea
+                                      rows={3}
+                                      value={q.sampleAnswer || ""}
+                                      onChange={(e) =>
                                         updateQuestion(
                                           lesson.id,
                                           q.id,
-                                          "pairs",
-                                          [
-                                            ...(q.pairs || []),
-                                            {
-                                              id: crypto.randomUUID(),
-                                              left: "",
-                                              right: "",
-                                            },
-                                          ]
+                                          "sampleAnswer",
+                                          e.target.value
                                         )
                                       }
-                                    >
-                                      <Plus size={14} className="mr-1" />
-                                      Add Pair
-                                    </Button>
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                      placeholder="Provide guidance for graders or expected points to cover"
+                                    />
                                   </div>
 
-                                  {(q.pairs || []).map((p) => (
-                                    <div
-                                      key={p.id}
-                                      className="grid grid-cols-[1fr_1fr_auto] gap-3 items-center"
-                                    >
-                                      <input
-                                        type="text"
-                                        value={p.left}
-                                        onChange={(e) =>
-                                          updateQuestion(
-                                            lesson.id,
-                                            q.id,
-                                            "pairs",
-                                            (q.pairs || []).map((x) =>
-                                              x.id === p.id
-                                                ? { ...x, left: e.target.value }
-                                                : x
-                                            )
-                                          )
-                                        }
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                        placeholder="Left"
-                                      />
-                                      <input
-                                        type="text"
-                                        value={p.right}
-                                        onChange={(e) =>
-                                          updateQuestion(
-                                            lesson.id,
-                                            q.id,
-                                            "pairs",
-                                            (q.pairs || []).map((x) =>
-                                              x.id === p.id
-                                                ? {
-                                                    ...x,
-                                                    right: e.target.value,
-                                                  }
-                                                : x
-                                            )
-                                          )
-                                        }
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                        placeholder="Right"
-                                      />
-                                      <button
-                                        type="button"
-                                        className="text-red-500 hover:text-red-600"
-                                        onClick={() =>
-                                          updateQuestion(
-                                            lesson.id,
-                                            q.id,
-                                            "pairs",
-                                            (q.pairs || []).filter(
-                                              (x) => x.id !== p.id
-                                            )
-                                          )
-                                        }
-                                        title="Remove pair"
-                                      >
-                                        <Trash2 size={16} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="mt-4">
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Sample Answer (optional)
-                                  </label>
-                                  <textarea
-                                    rows={3}
-                                    value={q.sampleAnswer || ""}
-                                    onChange={(e) =>
-                                      updateQuestion(
-                                        lesson.id,
-                                        q.id,
-                                        "sampleAnswer",
-                                        e.target.value
-                                      )
-                                    }
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                    placeholder="Provide guidance for graders or expected points to cover"
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          ))}
+)}
+                              </div>
+                            ))}
+                          </div>
                         </div>
+                      )}
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => addQuestion(lesson.id)}
-                        >
-                          <Plus size={14} className="mr-2" />
-                          Add Question
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
+
+            {/* Add Chapter & Add Quiz buttons - always at bottom, centered */}
+            <div className="flex justify-center space-x-2 mt-6">
+              <Button
+                type="button"
+                onClick={() => addLesson("text")}
+                variant="outline"
+              >
+                <Plus size={16} className="mr-2" />
+                Add Chapter
+              </Button>
+              <Button
+                type="button"
+                onClick={() => addLesson("test")}
+                variant="outline"
+              >
+                <Plus size={16} className="mr-2" />
+                Add Quiz
+              </Button>
             </div>
 
             <div className="flex justify-end space-x-4">
@@ -1106,7 +1103,7 @@ export default function CreateCoursePage() {
                         </p>
                       </div>
                     </div>
-                  ))}
+                    ))}
                 </div>
               </div>
             </div>
