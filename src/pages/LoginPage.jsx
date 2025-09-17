@@ -6,12 +6,12 @@ import { toast } from "react-hot-toast";
 import useAuthStore from "../store/useAuthStore";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import { authAPI } from "../services/api";
+import { authAPI } from "../services/api"; // Ensure you have this API method to handle Google and OTP login
 
 const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [step, setStep] = useState("choice"); // 👈 "choice" | "email"
+  const [step, setStep] = useState("choice");
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockTimer, setLockTimer] = useState(0);
@@ -23,6 +23,7 @@ const LoginPage = () => {
     register,
     handleSubmit,
     formState: { errors },
+    reset,
   } = useForm();
 
   const startLockTimer = () => {
@@ -49,47 +50,43 @@ const LoginPage = () => {
 
   // Handle Google login
   const handleGoogleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_URL}/auth/google`;
+    window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;
   };
 
   // Send OTP
-  const handleSendOtp = async ({ email }) => {
-    setIsLoading(true);
-    try {
-      await authAPI.sendOtp({ email });
-      toast.success("OTP sent successfully!");
-      setOtpSent(true);
-    } catch (e) {
-      toast.error(e?.response?.data?.message || "Failed to send OTP");
-      setLoginAttempts((prev) => prev + 1);
-      if (loginAttempts + 1 >= 5) startLockTimer();
-    } finally {
-      setIsLoading(false);
-    }
-  };
+const handleSendOtp = async ({ email }) => {
+  setIsLoading(true);
+  try {
+    // Check if the request is structured correctly.
+    const response = await authAPI.loginOtpBegin({ email });
+    toast.success("OTP sent successfully!");
+    setOtpSent(true);
+  } catch (e) {
+    toast.error(e?.response?.data?.message || "Failed to send OTP");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   // Verify OTP
-  const handleVerifyOtp = async ({ email, otp }) => {
-    setIsLoading(true);
-    try {
-      const { data } = await authAPI.verifyOtp({ email, otp });
-      const env = data?.data ?? data ?? {};
-      const user = env.user ?? env.userInfo ?? env.profile ?? null;
-      const token = env.token ?? env.accessToken ?? env.jwt ?? null;
+const handleVerifyOtp = async ({ email, otp }) => {
+  console.log('Verifying OTP with values:', { email, otp }); // Log the payload
+  try {
+    const response = await authAPI.loginOtpVerify(email, otp);
+    const { token, user } = response.data.data;
 
-      if (!user || !token) throw new Error("Invalid login response");
+    localStorage.setItem("auth_token", token);
+    sessionStorage.setItem("auth_token", token);
+    useAuthStore.getState().setToken(token);
 
-      sessionStorage.setItem("auth_token", token);
-      sessionStorage.setItem("auth_user", JSON.stringify(user));
-      login(user, token);
+    navigate("/dashboard", { replace: true });
+  } catch (e) {
+    console.error('OTP verification failed:', e);
+    toast.error(e?.response?.data?.message || "Invalid OTP");
+  }
+};
 
-      navigate("/dashboard", { replace: true });
-    } catch (e) {
-      toast.error(e?.response?.data?.message || "Invalid OTP");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex flex-col justify-center py-8 px-4 sm:px-6 lg:px-8">
