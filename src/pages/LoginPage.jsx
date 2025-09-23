@@ -1,19 +1,18 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { BookOpen, Shield, Mail, Loader2, Lock } from "lucide-react";
+import { BookOpen, Shield, Mail } from "lucide-react";
 import { toast } from "react-hot-toast";
-import useAuthStore from "../store/useAuthStore";
+import { authAPI } from "../services/api";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import { authAPI } from "../services/api";
+import useAuthStore from "../store/useAuthStore"; // Import Zustand store
 
 const LoginPage = () => {
- 
+  const navigate = useNavigate();
 
- const [step, setStep] = useState("choice"); // For Google/Email choice
+  const [step, setStep] = useState("choice"); // For Google/Email choice
   const [isLoading, setIsLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false); // Not using OTP here for signup
 
   const {
     register,
@@ -21,20 +20,71 @@ const LoginPage = () => {
     formState: { errors },
   } = useForm();
 
+  const ROLE = {
+    SUPERADMIN: "SUPERADMIN",
+    ADMIN: "ADMIN",
+    INSTRUCTOR: "INSTRUCTOR",
+    STUDENT: "STUDENT",
+  };
+
   // Google login handler
   const handleGoogleLogin = () => {
     window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;  // Adjust URL as needed
   };
 
+  const normalizeRole = (raw) =>
+    String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "_");
+
   // Handle email signup
   const handleEmailSignup = async ({ email, password }) => {
+    console.log("user.role", useAuthStore.getState().user?.role);
     setIsLoading(true);
     try {
-      const response = await authAPI.signup({ email, password }); 
-      toast.success("Signup successful!");
-      setEmailSent(true);
+      const resp = await authAPI.login({ email, password });
+      const response = resp.data.data; // { user, token }
+      const user = response.user;
+      const token = response.token;
+
+      // Canonicalize role to one of ROLE values
+      const roleRaw = normalizeRole(user.role);
+      // Map common variants to canonical constants
+      const canonicalRole =
+        roleRaw === "SUPERADMIN" ? ROLE.SUPERADMIN :
+          roleRaw === "ADMIN" ? ROLE.ADMIN :
+            roleRaw === "INSTRUCTOR" ? ROLE.INSTRUCTOR :
+              ROLE.STUDENT;
+
+      // Persist
+      localStorage.setItem("auth_token", token);
+      localStorage.setItem("user_role", canonicalRole);
+      localStorage.setItem("user", JSON.stringify({ ...user, role: canonicalRole }));
+
+      // Zustand store
+      useAuthStore.getState().login({ ...user, role: canonicalRole }, token);
+
+      // Redirect by role
+      console.log("Login successful, role:", canonicalRole);
+      switch (canonicalRole) {
+        case ROLE.SUPERADMIN:
+          navigate("/superadmin", { replace: true });
+          break;
+        case ROLE.ADMIN:
+          navigate("/admin", { replace: true });
+          break;
+        case ROLE.INSTRUCTOR:
+          navigate("/instructor", { replace: true });
+          break;
+        default:
+          navigate("/dashboard", { replace: true }); // student
+      }
+
+      toast.success("Login successful!");
     } catch (e) {
-      toast.error(e?.response?.data?.message || "Signup failed");
+      console.log("Login error:", e);
+      toast.error(e?.response?.data?.message || "Login failed");
     } finally {
       setIsLoading(false);
     }
@@ -54,8 +104,14 @@ const LoginPage = () => {
             Welcome to PugArch LMS
           </h2>
           <p className="text-sm sm:text-base text-gray-600 mb-3">
-            Sign up to create your learning account
+            Login to access your learning account
           </p>
+          <Link to="/signup">
+
+            <div className="text-large text-blue-700">
+              signup to your account
+            </div>
+          </Link>
         </div>
       </div>
 
@@ -85,7 +141,7 @@ const LoginPage = () => {
                 size="lg"
               >
                 <Mail size={20} className="text-gray-500" />
-                <span>Sign up with Email</span>
+                <span>Login with Email</span>
               </Button>
             </div>
           )}
@@ -138,7 +194,7 @@ const LoginPage = () => {
                 disabled={isLoading}
                 size="lg"
               >
-                {isLoading ? "Signing up..." : "Sign up"}
+                {isLoading ? "Logging in..." : "Login"}
               </Button>
             </form>
           )}

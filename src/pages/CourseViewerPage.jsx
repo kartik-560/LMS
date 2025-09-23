@@ -16,7 +16,7 @@ import useAuthStore from "../store/useAuthStore";
 import Button from "../components/ui/Button";
 import Progress from "../components/ui/Progress";
 import Badge from "../components/ui/Badge";
-import { coursesAPI, chaptersAPI, FALLBACK_THUMB,progressAPI } from "../services/api";
+// import { coursesAPI, chaptersAPI, FALLBACK_THUMB,progressAPI } from "../services/api";
 
 const makeHeaders = () => {
   const token = useAuthStore.getState().token;

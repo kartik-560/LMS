@@ -34,13 +34,13 @@ import Modal from "../components/ui/Modal";
 import { progressAPI } from "../services/api";
 
 const StudentDashboardPage = () => {
-  const { user } = useAuthStore();
+  const { user, isAuthenticated, hasHydrated } = useAuthStore();
   const navigate = useNavigate();
 
   const [assignedCourses, setAssignedCourses] = useState([]);
   const [currentProgress, setCurrentProgress] = useState({});
-  const [availableTests, setAvailableTests] = useState([]); // future API
-  const [completedTests, setCompletedTests] = useState([]); // future API
+  const [availableTests, setAvailableTests] = useState([]);
+  const [completedTests, setCompletedTests] = useState([]);
   const [aiInterviewStatus, setAiInterviewStatus] = useState({});
   const [loading, setLoading] = useState(true);
 
@@ -62,16 +62,23 @@ const StudentDashboardPage = () => {
   });
 
   useEffect(() => {
+    if (!hasHydrated) return;
+    if (!isAuthenticated) {
+      // If your routing layer already guards this page, you can omit this.
+      setLoading(false);
+      return;
+    }
     fetchStudentData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hasHydrated, isAuthenticated]);
 
   const fetchStudentData = async () => {
     try {
       setLoading(true);
 
-      // 1) Who am I?
-      const { data: me } = await authAPI.me();
+      const meResp = await authAPI.me().catch(() => null);
+      const me = meResp?.data || null;
+
       const roleRaw = me?.role ?? me?.user?.role ?? user?.role ?? "";
       const role = String(roleRaw).toUpperCase();
       const studentId = String(me?.id ?? me?.user?.id ?? user?.id ?? "").trim();
@@ -104,73 +111,138 @@ const StudentDashboardPage = () => {
         return;
       }
 
-      // 2) Enrollments -> course ids
-      const { data: enrolls = [] } = await enrollmentsAPI.listByStudent(
-        studentId
-      );
-      const courseIds = enrolls.map((e) => e.courseId);
+      // ---- FIX #1: robust courseId extraction + status filter
+      const enrolls = await enrollmentsAPI.listSelf();
+      // const enrolls = await enrollmentsAPI.listSelfEnrollmentRequests();
+const safeEnrolls = Array.isArray(enrolls) ? enrolls : [];
+      const approvedStatuses = new Set(["APPROVED", "ACCEPTED", "ENROLLED"]);
+    const courseIds = Array.from(
+  new Set(
+    safeEnrolls
+      .filter(e => !e.status || approvedStatuses.has(String(e.status).toUpperCase()))
+      .map(e => e.courseId ?? e.course?.id)
+      .filter(Boolean)
+  )
+);
       if (courseIds.length === 0) {
         resetState();
         return;
       }
 
-      // 3) Courses
-      const { data: myCourses = [] } = await coursesAPI.list({
-        ids: courseIds.join(","),
-      });
+      // Helper to fetch by IDs if main endpoint doesn't return anything
+const fetchCoursesByIds = async (ids) => {
+  const resp = await coursesAPI.getCourseCatalog({
+    view: "enrolled",
+    collegeId: user?.collegeId,
+    page: 1,
+    pageSize: 200,
+  });
 
-      // 4) Per-course details (chapters + server progress summaries)
+  const list = Array.isArray(resp) ? resp : (resp?.data || []);
+  return list.filter(c => ids.includes(c.id || c.courseId));
+};
+
+      // const fetchCoursesForStudent = async (studentId, courseIds) => {
+      //   try {
+      //     // Pull the student's visible/assigned courses in one shot
+      //     const resp = await coursesAPI.getCourseCatalog({
+      //       view: "student",
+      //       // studentId,
+      //       collegeId: user?.collegeId,
+      //       page: 1,
+      //       pageSize: 200,  // big enough
+      //       status: "assigned", // if your backend supports this filter
+      //     });
+
+      //     // resp shape can vary; handle both array and {items:[]}
+      //     const list = Array.isArray(resp)
+      //       ? resp
+      //       : (resp?.items || resp?.data || resp || []);
+
+      //     // Keep only the enrolled courses we saw in /enrollments/self
+      //     return list.filter(c => courseIds.includes(c.id));
+      //   } catch (e) {
+      //     console.error("Student catalog fetch failed", e);
+      //     return [];
+      //   }
+      // };
+
+      // Try your existing endpoint first…
+      let myCourses = [];
+      try {
+        const resp = await coursesAPI.getStudentCourses(
+          user?.collegeId,
+          studentId,
+          "",
+          "all",
+          "all",
+          [0, 500],
+          "popular",
+          "assigned",
+          1,
+          20
+        );
+        myCourses = resp?.data || [];
+      } catch {
+        // ignore; we'll fall back below
+      }
+
+      // ---- FIX #2: fallback if empty
+      if (!Array.isArray(myCourses) || myCourses.length === 0) {
+        console.log("Fallback via student catalog for", courseIds);
+        myCourses = await fetchCoursesByIds(studentId, courseIds);
+      }
+      // If still nothing, bail gracefully
+      if (!myCourses || myCourses.length === 0) {
+        resetState();
+        return;
+      }
+
+      // ---- existing aggregation logic (unchanged) ----
       const progressData = {};
       const aiStatusData = {};
       const courseWithCounts = [];
 
-      // For global stats
       let totalChaptersDone = 0;
-      let weightedScoreSum = 0; // sum of (courseAvg% * testsTaken)
+      let weightedScoreSum = 0;
       let totalTestsTaken = 0;
 
       for (const course of myCourses) {
-        // a) chapters count
         const { data: chapters = [] } = await chaptersAPI.listByCourse(
           course.id
         );
 
-        // b) server-side progress summary for this course
-        const { data: sumRes } = await progressAPI.courseSummary(course.id);
-        const summary = sumRes?.data ?? {
+        const sumRes = await progressAPI
+          .courseSummary(course.id)
+          .catch(() => null);
+        const summary = sumRes?.data?.data ?? {
           chapters: { done: 0, total: chapters.length },
           modules: { done: 0, total: 0 },
           tests: { averagePercent: 0, taken: 0 },
         };
 
-        // c) list completed chapter ids (prefill viewer use-cases if you need)
-        // const completedIds = (await progressAPI.completedChapters(course.id)).data?.data ?? [];
-
-        // d) build per-course progress object you keep in state
         const p = {
-          completedChapters: Array(summary.chapters?.done || 0).fill(0), // placeholder array if you still expect one
+          completedChapters: Array(summary.chapters?.done || 0).fill(0),
           courseTestResult: {
             averagePercent: summary.tests?.averagePercent || 0,
             taken: summary.tests?.taken || 0,
+            passed: (summary.tests?.averagePercent || 0) >= 60,
           },
-          aiInterviewResult: null, // keep as before (unless you compute this elsewhere)
+          aiInterviewResult: null,
         };
         progressData[course.id] = p;
 
-        // e) AI eligibility sample (keep your logic)
         aiStatusData[course.id] = {
-          eligible: (summary.tests?.averagePercent || 0) >= 60, // example rule
+          eligible: (summary.tests?.averagePercent || 0) >= 60,
           completed: Boolean(p?.aiInterviewResult),
           result: p?.aiInterviewResult || null,
         };
 
-        // f) per-course card data
         courseWithCounts.push({
           ...course,
           totalChapters: summary.chapters?.total ?? chapters.length,
         });
 
-        // accumulate global stats
         totalChaptersDone += summary.chapters?.done || 0;
         const taken = summary.tests?.taken || 0;
         const avg = summary.tests?.averagePercent || 0;
@@ -181,19 +253,16 @@ const StudentDashboardPage = () => {
       setAssignedCourses(courseWithCounts);
       setCurrentProgress(progressData);
       setAiInterviewStatus(aiStatusData);
+      setCompletedTests([]);
+      setAvailableTests([]);
 
-      // 5) Completed tests list (optional: hydrate from attempts if you want)
-      setCompletedTests([]); // keep your placeholder for now
-      setAvailableTests([]); // until you wire assessments discovery
-
-      // 6) Global dashboard stats
       setStats({
         totalCourses: courseWithCounts.length,
         completedChapters: totalChaptersDone,
         averageTestScore: totalTestsTaken
           ? Math.round(weightedScoreSum / totalTestsTaken)
           : 0,
-        totalTimeSpent: 0, // fill from server if you track it; else keep 0
+        totalTimeSpent: 0,
         certificatesEarned: Object.values(aiStatusData).filter(
           (x) => x.completed
         ).length,
@@ -202,7 +271,7 @@ const StudentDashboardPage = () => {
       console.error("Error fetching student data:", error);
       toast.error(
         error?.response?.data?.error ||
-          error.message ||
+          error?.message ||
           "Failed to load dashboard data"
       );
     } finally {
@@ -210,7 +279,6 @@ const StudentDashboardPage = () => {
     }
   };
 
-  // 👉 Navigate to viewer (optionally choose first chapter)
   const goToCourse = async (courseId) => {
     try {
       const { data: chapters = [] } = await chaptersAPI.listByCourse(courseId);
@@ -354,12 +422,12 @@ const StudentDashboardPage = () => {
               <p className="text-sm sm:text-base text-gray-600">
                 Continue your learning journey and unlock new opportunities.
               </p>
-              <Button
+              {/* <Button
                 className="ml-auto"
                 onClick={() => navigate("/first-login")}
               >
                 Go to First Login
-              </Button>
+              </Button> */}
             </div>
           </div>
         </div>
@@ -507,7 +575,7 @@ const StudentDashboardPage = () => {
                                 className="flex-1"
                                 onClick={() => {
                                   setShowCourseModal(false);
-                                  goToCourse(selectedCourse.id);
+                                  goToCourse(course.id);
                                 }}
                               >
                                 <PlayCircle size={16} className="mr-2" />

@@ -3,7 +3,8 @@ import useAuthStore from "../store/useAuthStore";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-// Fallback thumbnail for missing images
+/* ----------------------------- Utils & defaults ---------------------------- */
+
 export const FALLBACK_THUMB =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
@@ -14,9 +15,9 @@ export const FALLBACK_THUMB =
      </svg>`
   );
 
-// Headers for API calls, including authorization if token exists
 export const makeHeaders = () => {
-  const token = useAuthStore.getState().token;
+  const token =
+    useAuthStore.getState().token || localStorage.getItem("auth_token");
   const headers = {
     "Content-Type": "application/json",
     "Cache-Control": "no-cache",
@@ -27,52 +28,62 @@ export const makeHeaders = () => {
   return headers;
 };
 
-// Create an axios instance
+/* ------------------------------- Axios client ------------------------------ */
+
 const api = axios.create({
   baseURL: `${API_BASE}/api`,
-  headers: { "Content-Type": "application/json" },
+  headers: {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+    Expires: "0",
+  },
 });
-
-// Request interceptor to attach token to every request if available
-api.interceptors.request.use((config) => {
-  let token = useAuthStore.getState().token;
-
-  // Fallback to localStorage/sessionStorage if token is missing in Zustand
-  if (!token) {
-    token =
-      localStorage.getItem("auth_token") ||
-      sessionStorage.getItem("auth_token");
+let tokenCache = null;
+export const setAuthToken = (token) => {
+  tokenCache = token || null;
+  if (token) localStorage.setItem("auth_token", token);
+  else {
+    localStorage.removeItem("auth_token");
+    sessionStorage.removeItem("auth_token");
   }
+};
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+const getToken = () =>
+  tokenCache ||
+  sessionStorage.getItem("auth_token") ||
+  localStorage.getItem("auth_token") ||
+  null;
 
-  return config;
-});
-
-// Response interceptor to handle 401 errors (token expired or invalid)
-const AUTH_WHITELIST = ["/api/auth/login", "/api/auth/register"];
+api.interceptors.request.use(
+  (config) => {
+    const t = getToken();
+    if (t) {
+      const val = t.startsWith("Bearer ") ? t : `Bearer ${t}`;
+      config.headers = { ...(config.headers || {}), Authorization: val };
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 api.interceptors.response.use(
-  (res) => res, // Pass the successful response
-  (err) => {
-    const status = err?.response?.status;
-    const url = err?.config?.url || "";
-
-    if (status === 401 && !AUTH_WHITELIST.some((p) => url.includes(p))) {
-      // Log out the user on token expiry or invalid token
-      useAuthStore.getState().logout?.();
-      // Avoid redirect loops
-      if (window.location.pathname !== "/login") {
-        window.location.assign("/login");
-      }
+  (res) => res,
+  (error) => {
+    const status = error?.response?.status;
+    const url = error?.config?.url || "";
+    if (
+      status === 401 &&
+      !["/auth/login", "/auth/registrations"].some((p) => url.includes(p))
+    ) {
+      // just clear token & bounce; avoid importing the store here
+      setAuthToken(null);
+      window.location.assign("/login");
     }
-    return Promise.reject(err); // Pass the error along
+    return Promise.reject(error);
   }
 );
 
-// Utility function to convert file to base64 (for file uploads)
 export async function fileToBase64(file) {
   if (!file) return "";
   return await new Promise((resolve, reject) => {
@@ -83,171 +94,263 @@ export async function fileToBase64(file) {
   });
 }
 
-// Auth-related API calls
+export const handleAPIError = (error) => {
+  if (error?.response) return error.response.data;
+  if (error?.request) return { error: "No response from server" };
+  return { error: error?.message || "Unknown error" };
+};
+
 export const authAPI = {
-  // Register a user
   register: (payload) => api.post("/auth/registrations", payload),
+  login: (payload) => api.post("/auth/login", payload),
+  loginOtpBegin: (payload) =>
+    api.post("/auth/signup/begin", payload).then((r) => r.data),
+  loginOtpVerify: (email, otp) =>
+    api.post("/auth/signup/verify", { email, otp }).then((r) => r.data),
+  completeSignup: (payload) =>
+    api.post("/signup/complete", payload).then((r) => r.data),
+me: async () => {
+  const raw = await api.get("/auth/me").then((r) => r.data);
 
-  // Standard login (with username and password)
-  login: async (payload) => {
-    try {
-      const response = await api.post("/auth/login", payload);
-      const { token, user } = response.data.data;
+  const meUser = Array.isArray(raw) ? raw[0] : raw;
+  if (!meUser) return null;
 
-      // Store token in localStorage and sessionStorage
-      localStorage.setItem("auth_token", token);
-      sessionStorage.setItem("auth_token", token);
+  const collegeId =
+    meUser.collegeId ??
+    meUser.college_id ??
+    meUser.college?.id ??
+    null;
 
-      // Update Zustand store with token
-      useAuthStore.getState().setToken(token);
-
-      return { success: true, user, token };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.message || "Login failed",
-      };
-    }
-  },
-
-  // OTP - Step 1: Request OTP
-  loginOtpBegin: async (payload) => {
-    try {
-      const response = await api.post("/auth/signup/begin", payload);
-      return response.data;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.message || "Failed to send OTP",
-      };
-    }
-  },
-
-  // OTP - Step 2: Verify OTP
-  loginOtpVerify: async (email, otp) => {
-    try {
-      return await api
-        .post("/auth/signup/verify", { email, otp })
-        .then((response) => response.data);
-      const token = response.data.token;
-
-      // Store token in localStorage and sessionStorage
-      localStorage.setItem("auth_token", token);
-      sessionStorage.setItem("auth_token", token);
-
-      // Update Zustand store with token
-      // useAuthStore.getState().setToken(token);
-
-      return { success: true, token };
-    } catch (error) {
-      console.error("OTP verification failed:", error);
-      return {
-        success: false,
-        message: error.response?.data?.message || "Invalid OTP",
-      };
-    }
-  },
-
-  me: () => api.get("/auth/me"),
+  return { ...meUser, collegeId }; // ✅ always flat
+},
 
   logout: () => {
     useAuthStore.getState().logout();
-
     localStorage.removeItem("auth_token");
     sessionStorage.removeItem("auth_token");
-
-    // Redirect to login page
     window.location.href = "/login";
   },
+  isAuthenticated: () =>
+    !!(
+      localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token")
+    ),
+};
 
-  // Optional: Check if user is logged in
-  isAuthenticated: () => {
-    const token =
-      localStorage.getItem("auth_token") ||
-      sessionStorage.getItem("auth_token");
-    return token ? true : false;
+export const superAdminAPI = {
+  getOverview: async () => {
+    const { data } = await api.get("/superadmin/overview");
+    return data; // { overview, courseBreakdown }
+  },
+  getAdmins: async () => {
+    const { data } = await api.get("/superadmin/admins");
+    return data; // array
+  },
+  getInstructors: async () => {
+    const { data } = await api.get("/superadmin/instructors");
+    return data; // array
+  },
+  getStudents: async () => {
+    const { data } = await api.get("/superadmin/students");
+    return data; // array
+  },
+  updateUserPermissions: async (userId, permissions) => {
+    const { data } = await api.patch(
+      `/superadmin/users/${userId}/permissions`,
+      permissions
+    );
+    return data;
+  },
+  deleteStudent: async (userId) => {
+    const { data } = await api.delete(`/superadmin/users/${userId}`);
+    return data;
   },
 };
 
+export const coursesAPI = {
+  list: async (params = {}) => {
+    const { data } = await api.get("/superadmin/courses", { params });
+
+    return data.data || data;
+  },
+
+   getCourseCatalog: async ({
+    view,           
+    collegeId,
+    studentId,
+    creatorId,
+    searchTerm,
+    status,
+    category,
+    page = 1,
+    pageSize = 20,
+  } = {}) => {
+    const params = {
+      view,
+      collegeId,
+      studentId,
+      creatorId,
+      search: searchTerm, 
+      status,
+      category,
+      page,
+      pageSize,
+    };
+
+     const { data } = await api.get("/superadmin/courses", { params });
+   
+    return data?.data ?? data;
+  },
+  get: async (id, params = {}) =>
+    api.get(`/superadmin/courses/${id}`, { params }).then(r => r.data),
+  create: async (payload) => {
+    const { data } = await api.post("/superadmin/courses", payload);
+    return data;
+  },
+  update: async (id, payload) => {
+    const { data } = await api.patch(`/superadmin/courses/${id}`, payload);
+    return data;
+  },
+  remove: async (id) => {
+    const { data } = await api.delete(`/superadmin/courses/${id}`);
+    return data;
+  },
+  assign: async (
+    courseId,
+    { collegeId, departmentId = null, capacity = null }
+  ) => {
+    const { data } = await api.post(`/superadmin/courses/${courseId}/assign`, {
+      collegeId,
+      departmentId,
+      capacity,
+    });
+    return data;
+  },
+  unassign: async (courseId, { collegeId, departmentId = null }) => {
+    const { data } = await api.delete(
+      `/superadmin/courses/${courseId}/unassign`,
+      {
+        data: { collegeId, departmentId },
+      }
+    );
+    return data;
+  },
+  assignments: async (courseId) => {
+    const { data } = await api.get(
+      `/superadmin/courses/${courseId}/assignments`
+    );
+    return data;
+  },
+};
+
+export const collegesAPI = {
+  list: (params = {}) =>
+    api.get("/colleges", { params, headers: makeHeaders() }),
+  getColleges: () => api.get(`/colleges`),
+  getCollege: (id) => api.get(`/colleges/${id}`),
+  createCollege: (data) => api.post(`/colleges`, data),
+  updateCollege: (id, data) => api.put(`/colleges/${id}`, data),
+  deleteCollege: (id) => api.delete(`/colleges/${id}`),
+};
 
 export const chaptersAPI = {
-  listByCourse: (courseId) => api.get("/chapters", { params: { courseId } }),
+  listByCourse: (courseId) =>
+    api.get(`/courses/${courseId}/chapters`).then((r) => r.data),
+  getChapterDetails: (chapterId) =>
+    api.get(`/chapters/${chapterId}`).then((r) => r.data),
   create: (courseId, payload) =>
-    api.post(`/courses/${courseId}/chapters`, payload),
-  update: (id, payload) => api.patch(`/chapters/${id}`, payload),
-  remove: (id) => api.delete(`/chapters/${id}`),
+    api.post(`/courses/${courseId}/chapters`, payload).then((r) => r.data),
+  update: (chapterId, payload) =>
+    api.patch(`/chapters/${chapterId}`, payload).then((r) => r.data),
+  remove: (chapterId) =>
+    api.delete(`/chapters/${chapterId}`).then((r) => r.data),
 };
 
 export const uploadsAPI = {
   uploadFile: async (file) => {
     const formData = new FormData();
     formData.append("file", file);
-    try {
-      // Use the central 'api' axios instance
-      const res = await api.post("/uploads/file", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return res.data.url; // Returns the public URL
-    } catch (error) {
-      console.error("File upload failed:", error);
-      throw error;
-    }
+    const res = await api.post("/uploads/file", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data.url;
+  },
+
+  uploadBase64: async (dataUrl) => {
+    const res = await api.post("/uploads/base64", { dataUrl });
+    // support { url } or raw string
+    return res.data?.url ? { url: res.data.url } : res.data;
   },
 };
+
 export const enrollmentsAPI = {
-  list: (params = {}) => api.get("/enrollments", { params }),
+  // Generic list with filters
+  list: (params = {}) =>
+    api.get("/enrollments", { params }).then((r) => r.data),
 
+  // ⚠️ Deprecated: studentId-based lookup (kept for admin use if needed)
   listByStudent: (studentId) =>
-    api.get("/enrollments", { params: { studentId } }),
+    api.get("/enrollments", { params: { studentId } }).then((r) => r.data),
 
-  listByCourseAdmin: (courseId) => api.get(`/courses/${courseId}/enrollments`),
+  // Admin: list all enrollments for a given course
+  listByCourseAdmin: (courseId) =>
+    api.get(`/courses/${courseId}/enrollments`).then((r) => r.data),
 
+  // Admin: manually enroll a student
   enrollStudent: (courseId, studentId) =>
-    api.post(`/courses/${courseId}/enrollments`, { studentId }),
+    api.post(`/courses/${courseId}/enrollments`, { studentId }).then((r) => r.data),
 
-  unenroll: (enrollmentId) => api.delete(`/enrollments/${enrollmentId}`),
+  // Admin: remove a student from a course
+  unenroll: (enrollmentId) =>
+    api.delete(`/enrollments/${enrollmentId}`).then((r) => r.data),
 
-  listSelf: () => api.get("/enrollments/self"),
+  // Student: list enrollments bound to the current auth user
+  listSelf: () => api.get("/enrollments/self").then((r) => r.data),
+
+  // Instructor: list all enrollment requests for a course
+  listEnrollmentRequestsForCourse: (courseId) =>
+    api.get(`/courses/${courseId}/enrollment-requests`).then((r) => r.data),
+
+  // Student: request enrollment in a course
+  requestEnrollment: (courseId) =>
+    api.post(`/courses/${courseId}/enrollment-requests`).then((r) => r.data),
+
+  // ✅ Student: list own enrollment requests (approved/pending/rejected)
+  listSelfEnrollmentRequests: () =>
+    api.get("/enrollment-requests/me").then((r) => r.data),
+
+  // Instructor: update single enrollment request status
+  updateEnrollmentRequestStatus: (requestId, nextStatus) =>
+    api.patch(`/enrollment-requests/${requestId}`, { nextStatus }).then((r) => r.data),
+
+  // Instructor: bulk update enrollment request statuses
+  bulkUpdateEnrollmentRequests: (ids, nextStatus) =>
+    api.patch("/enrollment-requests/bulk", { ids, nextStatus }).then((r) => r.data),
+
+  // Instructor: list all pending enrollment requests across eligible courses
+  listInstructorRequests: () =>
+    api.get("/instructor/enrollment-requests").then((r) => r.data),
 };
 
-export const enrollmentRequestsAPI = {
-  create: (courseId) => api.post(`/courses/${courseId}/enrollment-requests`),
-  listMine: () => api.get("/enrollments/self"),
-  listForInstructor: () => api.get("/instructor/enrollment-requests"),
-  actOn: (requestId, action) =>
-    api.patch(`/enrollment-requests/${requestId}`, { action }),
-};
-
-export const instructorsAPI = {
-  list: () => api.get("/courses/instructors-list"),
-};
 
 export const assessmentsAPI = {
   listByChapter: (chapterId) =>
-    api.get("/assessments", { params: { chapterId } }),
-  get: (id) => api.get(`/assessments/${id}`),
+    api.get(`/chapters/${chapterId}/assessments`).then((r) => r.data), // ✅ fixed URL
+  get: (id) => api.get(`/assessments/${id}`).then((r) => r.data),
   createForChapter: (chapterId, payload) =>
-    api.post(`/assessments/chapters/${chapterId}`, payload),
-  update: (id, payload) => api.put(`/assessments/${id}`, payload),
-  remove: (id) => api.delete(`/assessments/${id}`),
+    api.post(`/chapters/${chapterId}/assessments`, payload).then((r) => r.data),
+  update: (id, payload) =>
+    api.put(`/assessments/${id}`, payload).then((r) => r.data),
+  remove: (id) => api.delete(`/assessments/${id}`).then((r) => r.data),
 };
 
 export const progressAPI = {
   completeChapter: (chapterId) =>
-    api.post(`/progress/chapters/${chapterId}/complete`),
+    api.post(`/progress/chapters/${chapterId}/complete`).then((r) => r.data),
   completedChapters: (courseId) =>
-    api.get(`/progress/course/${courseId}/completed`),
-  courseSummary: (courseId) => api.get(`/progress/course/${courseId}/summary`),
-  dashboard: () => api.get(`/progress/dashboard`),
-};
-
-export const adminAPI = {
-  overview: () => api.get("/admin/overview"),
-  courses: () => api.get("/admin/courses"),
-  students: () => api.get("/admin/students"),
-  instructors: () => api.get("/admin/instructors"),
-  setInstructorPermissions: (id, payload) =>
-    api.patch(`/admin/instructors/${id}/permissions`, payload),
+    api.get(`/progress/course/${courseId}/completed`).then((r) => r.data),
+  courseSummary: (courseId) =>
+    api.get(`/progress/course/${courseId}/summary`).then((r) => r.data),
+  dashboard: () => api.get(`/progress/dashboard`).then((r) => r.data),
 };
 
 export default api;

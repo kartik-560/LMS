@@ -12,8 +12,6 @@ import api, {
   coursesAPI,
   chaptersAPI,
   uploadsAPI,
-  instructorsAPI,
-  courseInstructorsAPI,
   assessmentsAPI,
 } from "../services/api";
 
@@ -54,10 +52,6 @@ export default function CreateCoursePage() {
   const isAdminOnly = roleNorm === "ADMIN";
   const isAdmin = isSuperAdmin || isAdminOnly;
 
-  // --- instructor dropdown state (Admin/SA only)
-  const [instructorOptions, setInstructorOptions] = useState([]);
-  const [selectedInstructorId, setSelectedInstructorId] = useState("");
-
   useEffect(() => {
     if (!user) return;
     const allowed =
@@ -67,23 +61,18 @@ export default function CreateCoursePage() {
     setCanCreate(allowed);
   }, [user, roleNorm, isSuperAdmin, isAdminOnly]);
 
-  // Load instructors (Admin/SA only)
-  useEffect(() => {
-    if (!isAdmin) return;
-    (async () => {
-      try {
-        if (token)
-          api.defaults.headers.common.Authorization = `Bearer ${token}`;
-        const { data } = await instructorsAPI.list();
-        setInstructorOptions(Array.isArray(data) ? data : []);
-      } catch (e) {
-        console.error("Failed to load instructors:", e);
-        toast.error("Failed to load instructors");
-      }
-    })();
-  }, [isAdmin, token]);
-
-  const [lessons, setLessons] = useState([]);
+  const [lessons, setLessons] = useState([
+    {
+      id: Date.now(),
+      type: "text",
+      title: "",
+      content: "",
+      pdfFile: null,
+      quizTitle: "",
+      quizDurationMinutes: "",
+      questions: [emptyQuizQuestion()],
+    },
+  ]);
 
   const addLesson = (type = "text") => {
     setLessons((prev) => [
@@ -111,7 +100,7 @@ export default function CreateCoursePage() {
 
   const removeLesson = (id) => {
     setLessons((prev) =>
-      prev.length > 1 ? prev.filter((l) => l.id !== id) : []
+      prev.length > 1 ? prev.filter((l) => l.id !== id) : prev
     );
   };
   const updateLesson = (id, field, value) => {
@@ -342,46 +331,28 @@ export default function CreateCoursePage() {
   const onSubmit = async (data) => {
     if (!validateBeforeSubmit()) return;
 
-    // Admins must assign an instructor
-    if (isAdmin && !selectedInstructorId) {
-      toast.error("Please select an instructor to assign.");
-      return;
-    }
-
     setIsLoading(true);
     try {
-      if (token) api.defaults.headers.common.Authorization = `Bearer ${token}`;
-
-      // 1) Optional thumbnail upload
+      // interceptor already injects token
       let thumbnailUrl = null;
       if (base64DataUrl) {
-        const upRes = await api.post("/uploads/base64", {
-          dataUrl: base64DataUrl,
-        });
-        thumbnailUrl = upRes.data?.url || null;
+        const up = await uploadsAPI.uploadBase64(base64DataUrl);
+        thumbnailUrl = up?.url || null;
       }
 
-      // 2) Create Course
+      // Create Course (removed managerId; status/category/description/title only)
       const coursePayload = {
         title: data.title,
         thumbnail: thumbnailUrl,
         status: "published",
         category: data.category,
         description: data.description,
-        managerId: null,
       };
-      const courseRes = await coursesAPI.create(coursePayload);
-      const course = courseRes?.data ?? courseRes;
-      if (!course?.id) throw new Error("Failed to create course");
+      const course = await coursesAPI.create(coursePayload);
+      const courseId = course?.id ?? course?.data?.id ?? null;
+      if (!courseId) throw new Error("Failed to create course");
 
-      // 2.5) Attach selected instructor (Admin/SA only)
-      if (isAdmin && selectedInstructorId) {
-        await courseInstructorsAPI.setForCourse(course.id, [
-          selectedInstructorId,
-        ]);
-      }
-
-      // 3) Create chapters (and assessments for quiz chapters)
+      // Create chapters (and assessments for quiz chapters)
       for (const [index, lesson] of lessons.entries()) {
         const chapterPayload = {
           title: lesson.type === "test" ? lesson.quizTitle : lesson.title,
@@ -397,11 +368,11 @@ export default function CreateCoursePage() {
             chapterPayload.attachments = [pdfUrl];
           }
 
-          await chaptersAPI.create(course.id, chapterPayload);
+          await chaptersAPI.create(courseId, chapterPayload);
         } else {
           // Quiz chapter
-          const chRes = await chaptersAPI.create(course.id, chapterPayload);
-          const chapterId = chRes?.data?.id ?? chRes?.id ?? chRes;
+          const chRes = await chaptersAPI.create(courseId, chapterPayload);
+          const chapterId = chRes?.id ?? chRes?.data?.id ?? chRes;
           if (!chapterId)
             throw new Error("Chapter id missing for quiz creation");
 
@@ -542,31 +513,7 @@ export default function CreateCoursePage() {
                 )}
               </div>
 
-              {/* Instructor (Admin / Super Admin only) */}
-              {isAdmin && (
-                <div className="mt-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Assign Instructor
-                  </label>
-                  <select
-                    value={selectedInstructorId}
-                    onChange={(e) => setSelectedInstructorId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  >
-                    <option value="">— Select instructor —</option>
-                    {instructorOptions.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.fullName}
-                        {i.email ? ` (${i.email})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    The selected instructor will be assigned to this course.
-                  </p>
-                </div>
-              )}
-
+              {/* Thumbnail */}
               <ImagePicker
                 onFileAsBase64={(dataUrl) => {
                   setBase64DataUrl(dataUrl);
@@ -601,9 +548,9 @@ export default function CreateCoursePage() {
                               placeholder={`Chapter ${idx + 1}`}
                             />
                           </div>
-                        ) : lesson.type === "test" ? (
+                        ) : (
                           <div className="hidden md:block" />
-                        ) : null}
+                        )}
 
                         {lesson.type === "text" && (
                           <div>
@@ -618,6 +565,7 @@ export default function CreateCoursePage() {
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                             >
                               <option value="text">Text & PDF</option>
+                              <option value="test">Quiz</option>
                             </select>
                           </div>
                         )}
@@ -731,16 +679,29 @@ export default function CreateCoursePage() {
                                   <h4 className="font-medium text-gray-900">
                                     Question {qIdx + 1}
                                   </h4>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() =>
-                                      removeQuestion(lesson.id, q.id)
-                                    }
-                                    disabled={lesson.questions.length === 1}
-                                  >
-                                    <Trash2 size={14} />
-                                  </Button>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      onClick={() =>
+                                        addQuestion(lesson.id)
+                                      }
+                                      title="Add question below"
+                                    >
+                                      <Plus size={14} />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      onClick={() =>
+                                        removeQuestion(lesson.id, q.id)
+                                      }
+                                      disabled={lesson.questions.length === 1}
+                                      title="Remove this question"
+                                    >
+                                      <Trash2 size={14} />
+                                    </Button>
+                                  </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -998,21 +959,19 @@ export default function CreateCoursePage() {
                                       placeholder="Provide guidance for graders or expected points to cover"
                                     />
                                   </div>
-
-)}
+                                )}
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
-
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Add Chapter & Add Quiz buttons - always at bottom, centered */}
+            {/* Add Chapter & Add Quiz buttons */}
             <div className="flex justify-center space-x-2 mt-6">
               <Button
                 type="button"
@@ -1103,7 +1062,7 @@ export default function CreateCoursePage() {
                         </p>
                       </div>
                     </div>
-                    ))}
+                  ))}
                 </div>
               </div>
             </div>

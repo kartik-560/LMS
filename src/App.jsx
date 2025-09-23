@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import useAuthStore from "./store/useAuthStore";
 import Navbar from "./components/layout/Navbar";
 import LandingPage from "./pages/LandingPage";
@@ -11,64 +11,79 @@ import AdminDashboardPage from "./pages/AdminDashboardPage";
 import SuperAdminDashboardPage from "./pages/SuperAdminDashboardPage";
 import CourseViewerPage from "./pages/CourseViewerPage";
 import RegisterPage from "./pages/RegisterPage";
-import { useLocation } from "react-router-dom";
 import Terms from "./pages/TermsPage";
 import Privacy from "./pages/PrivacyPage";
 import EditCoursePage from "./pages/EditCoursePage";
-
 import Signup from "./pages/Signup";
-// Protected Route Component
-const ProtectedRoute = ({ children, allowedRoles = [] }) => {
-  const { isAuthenticated, userRole } = useAuthStore();
+import Register from "./pages/Register";
+import AddcollegePage from "./pages/AddcollegePage";
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return children;
+const ROLE = {
+  SUPERADMIN: "SUPERADMIN",
+  ADMIN: "ADMIN",
+  INSTRUCTOR: "INSTRUCTOR",
+  STUDENT: "STUDENT",
 };
 
-// Public Route Component (redirects authenticated users)
-const PublicRoute = ({ children }) => {
-  const { isAuthenticated, userRole } = useAuthStore();
+const normalizeRole = (r) =>
+  String(r || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "_");
 
+const roleHome = {
+  [ROLE.SUPERADMIN]: "/superadmin",
+  [ROLE.ADMIN]: "/admin",
+  [ROLE.INSTRUCTOR]: "/instructor",
+  [ROLE.STUDENT]: "/dashboard",
+};
+
+const ProtectedRoute = ({ children, allowedRoles = [] }) => {
+  const { isAuthenticated, userRole, hasHydrated } = useAuthStore();
+  if (!hasHydrated) return <div />;
+
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+
+  const role = normalizeRole(userRole);
+  const need = allowedRoles.map(normalizeRole);
+
+  if (role === ROLE.SUPERADMIN) return children;
+
+  if (!need.length) return children;
+
+  if (need.includes(role)) return children;
+
+  return <Navigate to={roleHome[role] || "/"} replace />;
+};
+
+const PublicRoute = ({ children }) => {
+  const { isAuthenticated, userRole, hasHydrated } = useAuthStore();
+  if (!hasHydrated) return <div />;
   const location = useLocation();
   const allowWhenLoggedIn = location.state?.allowWhenLoggedIn === true;
-  if (isAuthenticated && !allowWhenLoggedIn) {
-    if (userRole === "superadmin") {
-      return <Navigate to="/superadmin" replace />;
-    } else if (userRole === "admin") {
-      return <Navigate to="/admin" replace />;
-    } else if (userRole === "instructor") {
-      return <Navigate to="/instructor" replace />;
-    } else {
-      return <Navigate to="/dashboard" replace />;
-    }
-  }
 
-  return children;
+  if (!isAuthenticated || allowWhenLoggedIn) return children;
+
+  const role = normalizeRole(userRole);
+  return <Navigate to={roleHome[role] || "/dashboard"} replace />;
 };
 
+// ---------- App ----------
 const App = () => {
   const { isAuthenticated } = useAuthStore();
 
   return (
     <div className="App">
       {isAuthenticated && <Navbar />}
+
       <Routes>
-        {/* Public Routes */}
+        {/* Public */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/courses" element={<CourseCatalogPage />} />
-
-        {/* Legal Pages */}
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
-        {/* Auth Routes */}
+        {/* Auth */}
         <Route
           path="/signup"
           element={
@@ -77,7 +92,14 @@ const App = () => {
             </PublicRoute>
           }
         />
-
+        <Route
+          path="/register-first"
+          element={
+            <PublicRoute>
+              <Register />
+            </PublicRoute>
+          }
+        />
         <Route
           path="/login"
           element={
@@ -86,21 +108,20 @@ const App = () => {
             </PublicRoute>
           }
         />
-
         <Route
           path="/register"
           element={
-            <PublicRoute>
+            <ProtectedRoute allowedRoles={[ROLE.ADMIN, ROLE.SUPERADMIN]}>
               <RegisterPage />
-            </PublicRoute>
+            </ProtectedRoute>
           }
         />
 
-        {/* Protected Routes */}
+        {/* Protected */}
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute allowedRoles={["student"]}>
+            <ProtectedRoute allowedRoles={[ROLE.STUDENT]}>
               <StudentDashboardPage />
             </ProtectedRoute>
           }
@@ -109,7 +130,7 @@ const App = () => {
         <Route
           path="/instructor"
           element={
-            <ProtectedRoute allowedRoles={["instructor", "admin"]}>
+            <ProtectedRoute allowedRoles={[ROLE.INSTRUCTOR]}>
               <InstructorDashboardPage />
             </ProtectedRoute>
           }
@@ -119,7 +140,12 @@ const App = () => {
           path="/courses/:courseId"
           element={
             <ProtectedRoute
-              allowedRoles={["student", "instructor", "admin", "superadmin"]}
+              allowedRoles={[
+                ROLE.STUDENT,
+                ROLE.INSTRUCTOR,
+                ROLE.ADMIN,
+                ROLE.SUPERADMIN,
+              ]}
             >
               <CourseViewerPage />
             </ProtectedRoute>
@@ -129,9 +155,7 @@ const App = () => {
         <Route
           path="/courses/create"
           element={
-            <ProtectedRoute
-              allowedRoles={["instructor", "admin", "superadmin"]}
-            >
+            <ProtectedRoute allowedRoles={[ROLE.ADMIN, ROLE.SUPERADMIN]}>
               <CreateCoursePage />
             </ProtectedRoute>
           }
@@ -140,20 +164,26 @@ const App = () => {
         <Route
           path="/courses/:courseId/edit"
           element={
-            <ProtectedRoute
-              allowedRoles={["instructor", "admin", "superadmin"]}
-            >
+            <ProtectedRoute allowedRoles={[ROLE.ADMIN, ROLE.SUPERADMIN]}>
               <EditCoursePage />
             </ProtectedRoute>
           }
         />
 
-        {/* Admin Routes */}
+        {/* Admin areas */}
         <Route
           path="/superadmin"
           element={
-            <ProtectedRoute allowedRoles={["superadmin"]}>
+            <ProtectedRoute allowedRoles={[ROLE.SUPERADMIN]}>
               <SuperAdminDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/add_college"
+          element={
+            <ProtectedRoute allowedRoles={[ROLE.SUPERADMIN]}>
+              <AddcollegePage />
             </ProtectedRoute>
           }
         />
@@ -161,13 +191,13 @@ const App = () => {
         <Route
           path="/admin"
           element={
-            <ProtectedRoute allowedRoles={["admin"]}>
+            <ProtectedRoute allowedRoles={[ROLE.ADMIN]}>
               <AdminDashboardPage />
             </ProtectedRoute>
           }
         />
 
-        {/* Catch all route */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

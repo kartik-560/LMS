@@ -12,14 +12,28 @@ import {
 } from "lucide-react";
 import useAuthStore from "../../store/useAuthStore";
 import Button from "../ui/Button";
-import logo from "../../assets/logo.png"; // adjust path based on where Navbar.jsx is
+import logo from "../../assets/logo.png";
 
 const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // <-- added
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const { user, isAuthenticated, userRole, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // --- role normalization to handle "SUPERADMIN" / "super_admin" / "superadmin"
+  const normalizeRole = (r) => {
+    const v = String(r || "")
+      .trim()
+      .replace(/\s|-/g, "_")
+      .toLowerCase(); // "SUPER ADMIN" -> "super_admin"
+    if (v === "super_admin" || v === "superadmin") return "superadmin";
+    if (v === "administrator" || v === "admin") return "admin";
+    if (v === "instructor") return "instructor";
+    if (v === "student") return "student";
+    return "user";
+  };
+  const role = normalizeRole(userRole || user?.role);
 
   // Final logout action
   const confirmLogout = () => {
@@ -30,7 +44,7 @@ const Navbar = () => {
   };
 
   const getRoleIcon = () => {
-    switch (userRole) {
+    switch (role) {
       case "superadmin":
         return <Shield size={20} />;
       case "student":
@@ -45,7 +59,7 @@ const Navbar = () => {
   };
 
   const getRoleLabel = () => {
-    switch (userRole) {
+    switch (role) {
       case "superadmin":
         return "Super Admin";
       case "student":
@@ -71,9 +85,7 @@ const Navbar = () => {
               <img
                 src={logo}
                 alt="Pugarch Logo"
-                className=" h-12 sm:h-16 md:h-20 lg:h-24 xl:h-28
-                  w-auto
-                  object-contain"
+                className="h-12 sm:h-16 md:h-20 lg:h-24 xl:h-28 w-auto object-contain"
               />
             </div>
           </Link>
@@ -82,7 +94,7 @@ const Navbar = () => {
           <div className="hidden lg:flex items-center space-x-6 xl:space-x-8">
             {isAuthenticated ? (
               <>
-                {userRole === "superadmin" ? (
+                {role === "superadmin" ? (
                   <Link
                     to="/superadmin"
                     className={`text-sm font-medium transition-colors ${
@@ -93,7 +105,7 @@ const Navbar = () => {
                   >
                     Super Admin
                   </Link>
-                ) : userRole === "admin" ? (
+                ) : role === "admin" ? (
                   <Link
                     to="/admin"
                     className={`text-sm font-medium transition-colors ${
@@ -104,7 +116,7 @@ const Navbar = () => {
                   >
                     Admin Panel
                   </Link>
-                ) : userRole === "instructor" ? (
+                ) : role === "instructor" ? (
                   <Link
                     to="/instructor"
                     className={`text-sm font-medium transition-colors ${
@@ -127,6 +139,7 @@ const Navbar = () => {
                     My Learning
                   </Link>
                 )}
+
                 <Link
                   to="/courses"
                   className={`text-sm font-medium transition-colors ${
@@ -165,12 +178,12 @@ const Navbar = () => {
                   <span>{getRoleLabel()}</span>
                 </div>
                 <div className="text-sm text-gray-900 font-medium max-w-32 truncate">
-                  {user?.name}
+                  {user?.name || user?.fullName}
                 </div>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowLogoutConfirm(true)} // <-- changed
+                  onClick={() => setShowLogoutConfirm(true)}
                   className="text-gray-600 hover:text-gray-900"
                 >
                   <LogOut size={16} />
@@ -208,7 +221,55 @@ const Navbar = () => {
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200">
             {isAuthenticated ? (
               <>
-                {/* role-based links ... */}
+                {role === "superadmin" ? (
+                  <Link
+                    to="/superadmin"
+                    className={`block px-3 py-2 rounded-md text-base font-medium ${
+                      isActive("/superadmin")
+                        ? "text-primary-600 bg-primary-50"
+                        : "text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                    }`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Super Admin
+                  </Link>
+                ) : role === "admin" ? (
+                  <Link
+                    to="/admin"
+                    className={`block px-3 py-2 rounded-md text-base font-medium ${
+                      isActive("/admin")
+                        ? "text-primary-600 bg-primary-50"
+                        : "text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                    }`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Admin Panel
+                  </Link>
+                ) : role === "instructor" ? (
+                  <Link
+                    to="/instructor"
+                    className={`block px-3 py-2 rounded-md text-base font-medium ${
+                      isActive("/instructor")
+                        ? "text-primary-600 bg-primary-50"
+                        : "text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                    }`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    My Courses
+                  </Link>
+                ) : (
+                  <Link
+                    to="/dashboard"
+                    className={`block px-3 py-2 rounded-md text-base font-medium ${
+                      isActive("/dashboard")
+                        ? "text-primary-600 bg-primary-50"
+                        : "text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                    }`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    My Learning
+                  </Link>
+                )}
 
                 <Link
                   to="/courses"
@@ -226,14 +287,14 @@ const Navbar = () => {
                   <div className="px-3 py-2 text-sm text-gray-600">
                     <div className="flex items-center space-x-2">
                       {getRoleIcon()}
-                      <span>Signed in as {user?.name}</span>
+                      <span>Signed in as {user?.name || user?.fullName}</span>
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
                       ({getRoleLabel()})
                     </div>
                   </div>
                   <button
-                    onClick={() => setShowLogoutConfirm(true)} // <-- changed
+                    onClick={() => setShowLogoutConfirm(true)}
                     className="block w-full text-left px-3 py-2 text-base font-medium text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-md"
                   >
                     Sign Out
@@ -242,7 +303,36 @@ const Navbar = () => {
               </>
             ) : (
               <>
-                {/* non-auth links */}
+                <Link
+                  to="/courses"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Browse Courses
+                </Link>
+                <Link
+                  to="/about"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  About
+                </Link>
+                <div className="border-t border-gray-200 pt-4 mt-4">
+                  <Link
+                    to="/login"
+                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Get Started
+                  </Link>
+                </div>
               </>
             )}
           </div>
