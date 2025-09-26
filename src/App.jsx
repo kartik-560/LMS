@@ -79,7 +79,8 @@ const App = () => {
       <Routes>
         {/* Public */}
         <Route path="/" element={<LandingPage />} />
-        <Route path="/courses" element={<CourseCatalogPage />} />
+        <Route path="/courses" element={<ProtectedRoute allowedRoles={[ROLE.STUDENT,ROLE.ADMIN, ROLE.SUPERADMIN,ROLE.INSTRUCTOR]}>
+          <CourseCatalogPage /></ProtectedRoute>} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 

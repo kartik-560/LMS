@@ -209,8 +209,8 @@ useEffect(() => {
 }, [
   hasHydrated,
   isAuthenticated,
-  isSuperAdmin,        // from memo
-  effectiveCollegeId,  // from memo
+  isSuperAdmin,        
+  effectiveCollegeId,  
   searchTerm,
   selectedCategory,
   selectedLevel,

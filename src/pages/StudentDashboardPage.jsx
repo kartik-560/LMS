@@ -64,233 +64,274 @@ const StudentDashboardPage = () => {
   useEffect(() => {
     if (!hasHydrated) return;
     if (!isAuthenticated) {
-      // If your routing layer already guards this page, you can omit this.
       setLoading(false);
       return;
     }
     fetchStudentData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasHydrated, isAuthenticated]);
 
   const fetchStudentData = async () => {
+    const abort = new AbortController();
+
+    const resetState = () => {
+      setAssignedCourses([]);
+      setCurrentProgress({});
+      setAvailableTests([]);
+      setCompletedTests([]);
+      setAiInterviewStatus({});
+      setStats({
+        totalCourses: 0,
+        completedChapters: 0,
+        averageTestScore: 0,
+        totalTimeSpent: 0,
+        certificatesEarned: 0,
+      });
+    };
+
     try {
       setLoading(true);
 
+      // Identify user/role
       const meResp = await authAPI.me().catch(() => null);
-      const me = meResp?.data || null;
+      const me = (meResp && (meResp.data ?? meResp)) || null;
 
-      const roleRaw = me?.role ?? me?.user?.role ?? user?.role ?? "";
+      const roleRaw =
+        (me && (me.role ?? (me.user && me.user.role))) ??
+        (user && user.role) ??
+        "";
       const role = String(roleRaw).toUpperCase();
-      const studentId = String(me?.id ?? me?.user?.id ?? user?.id ?? "").trim();
-
-      const resetState = () => {
-        setAssignedCourses([]);
-        setCurrentProgress({});
-        setAvailableTests([]);
-        setCompletedTests([]);
-        setAiInterviewStatus({});
-        setStats({
-          totalCourses: 0,
-          completedChapters: 0,
-          averageTestScore: 0,
-          totalTimeSpent: 0,
-          certificatesEarned: 0,
-        });
-      };
+      const studentId = String(
+        (me && (me.id ?? (me.user && me.user.id))) ?? (user && user.id) ?? ""
+      ).trim();
 
       if (!studentId) {
         toast.error("Could not identify your student account.");
         resetState();
-        return;
+        return () => abort.abort();
       }
       if (!role.includes("STUDENT")) {
         toast.error(
           "This page is for students. Please log in with a student account."
         );
         resetState();
-        return;
+        return () => abort.abort();
       }
 
-      // ---- FIX #1: robust courseId extraction + status filter
-      const enrolls = await enrollmentsAPI.listSelf();
-      // const enrolls = await enrollmentsAPI.listSelfEnrollmentRequests();
-const safeEnrolls = Array.isArray(enrolls) ? enrolls : [];
+      // Enrollments
+      const enrollsResp = await enrollmentsAPI.listSelf().catch(() => null);
+      const safeEnrolls = Array.isArray(enrollsResp?.data?.data)
+        ? enrollsResp.data.data
+        : Array.isArray(enrollsResp?.data)
+          ? enrollsResp.data
+          : Array.isArray(enrollsResp)
+            ? enrollsResp
+            : [];
+
       const approvedStatuses = new Set(["APPROVED", "ACCEPTED", "ENROLLED"]);
-    const courseIds = Array.from(
-  new Set(
-    safeEnrolls
-      .filter(e => !e.status || approvedStatuses.has(String(e.status).toUpperCase()))
-      .map(e => e.courseId ?? e.course?.id)
-      .filter(Boolean)
-  )
-);
+      const courseIds = Array.from(
+        new Set(
+          safeEnrolls
+            .filter(
+              (e) =>
+                !e.status ||
+                approvedStatuses.has(String(e.status).toUpperCase())
+            )
+            .map((e) => e.courseId ?? (e.course && e.course.id))
+            .filter(Boolean)
+        )
+      );
+
       if (courseIds.length === 0) {
         resetState();
-        return;
+        return () => abort.abort();
       }
 
-      // Helper to fetch by IDs if main endpoint doesn't return anything
-const fetchCoursesByIds = async (ids) => {
-  const resp = await coursesAPI.getCourseCatalog({
-    view: "enrolled",
-    collegeId: user?.collegeId,
-    page: 1,
-    pageSize: 200,
-  });
-
-  const list = Array.isArray(resp) ? resp : (resp?.data || []);
-  return list.filter(c => ids.includes(c.id || c.courseId));
-};
-
-      // const fetchCoursesForStudent = async (studentId, courseIds) => {
-      //   try {
-      //     // Pull the student's visible/assigned courses in one shot
-      //     const resp = await coursesAPI.getCourseCatalog({
-      //       view: "student",
-      //       // studentId,
-      //       collegeId: user?.collegeId,
-      //       page: 1,
-      //       pageSize: 200,  // big enough
-      //       status: "assigned", // if your backend supports this filter
-      //     });
-
-      //     // resp shape can vary; handle both array and {items:[]}
-      //     const list = Array.isArray(resp)
-      //       ? resp
-      //       : (resp?.items || resp?.data || resp || []);
-
-      //     // Keep only the enrolled courses we saw in /enrollments/self
-      //     return list.filter(c => courseIds.includes(c.id));
-      //   } catch (e) {
-      //     console.error("Student catalog fetch failed", e);
-      //     return [];
-      //   }
-      // };
-
-      // Try your existing endpoint first…
+      // Primary source: getStudentCourses
       let myCourses = [];
       try {
         const resp = await coursesAPI.getStudentCourses(
-          user?.collegeId,
+          user && user.collegeId,
           studentId,
-          "",
-          "all",
-          "all",
-          [0, 500],
-          "popular",
-          "assigned",
-          1,
-          20
+          "", // search
+          "all", // status
+          "all", // category
+          "assigned", // view (adjust if your API differs)
+          1, // page
+          200 // pageSize
         );
-        myCourses = resp?.data || [];
-      } catch {
-        // ignore; we'll fall back below
+        myCourses =
+          resp?.data?.data ?? resp?.data ?? (Array.isArray(resp) ? resp : []);
+      } catch (e) {
+        console.warn("getStudentCourses failed; will try fallback", e);
       }
 
-      // ---- FIX #2: fallback if empty
+      // Fallback by catalog
+      const fetchCoursesByIds = async (ids) => {
+        const resp = await coursesAPI
+          .getCourseCatalog({
+            view: "enrolled",
+            collegeId: user && user.collegeId,
+            page: 1,
+            pageSize: 500,
+          })
+          .catch(() => null);
+
+        const list = Array.isArray(resp?.data?.data)
+          ? resp.data.data
+          : Array.isArray(resp?.data)
+            ? resp.data
+            : Array.isArray(resp)
+              ? resp
+              : [];
+
+        return list.filter((c) => ids.includes(c.id || c.courseId));
+      };
+
+      const normalizeCourse = (c) => {
+        const cid = c?.id ?? c?.courseId ?? c?.course?.id;
+        return { ...c, id: cid }; // force .id to be the real courseId
+      };
+
       if (!Array.isArray(myCourses) || myCourses.length === 0) {
-        console.log("Fallback via student catalog for", courseIds);
-        myCourses = await fetchCoursesByIds(studentId, courseIds);
-      }
-      // If still nothing, bail gracefully
-      if (!myCourses || myCourses.length === 0) {
-        resetState();
-        return;
+        myCourses = await fetchCoursesByIds(courseIds);
       }
 
-      // ---- existing aggregation logic (unchanged) ----
-      const progressData = {};
-      const aiStatusData = {};
-      const courseWithCounts = [];
+      myCourses = myCourses.map(normalizeCourse);
+      if (!Array.isArray(myCourses) || myCourses.length === 0) {
+        resetState();
+        return () => abort.abort();
+      }
+
+      // Fetch per-course data in parallel
+      const [chaptersList, summaries] = await Promise.all([
+        Promise.all(
+          myCourses.map((c) =>
+            chaptersAPI
+              .listByCourse(c.id, { signal: abort.signal }) // c.id is guaranteed
+              .then((r) => r?.data?.data ?? r?.data ?? [])
+              .catch(() => [])
+          )
+        ),
+        Promise.all(
+          myCourses.map((c) =>
+            progressAPI
+              .courseSummary(c.id, { signal: abort.signal }) // c.id is guaranteed
+              .then((r) => r?.data?.data ?? null)
+              .catch(() => null)
+          )
+        ),
+      ]);
+
+      // Build fresh objects (no mutation of myCourses)
+      const nextProgressData = {};
+      const nextAiStatusData = {};
+      const nextCourseWithCounts = [];
 
       let totalChaptersDone = 0;
       let weightedScoreSum = 0;
       let totalTestsTaken = 0;
 
-      for (const course of myCourses) {
-        const { data: chapters = [] } = await chaptersAPI.listByCourse(
-          course.id
-        );
-
-        const sumRes = await progressAPI
-          .courseSummary(course.id)
-          .catch(() => null);
-        const summary = sumRes?.data?.data ?? {
+      myCourses.forEach((course, i) => {
+        const chapters = chaptersList[i] || [];
+        const sum = summaries[i] || {
           chapters: { done: 0, total: chapters.length },
           modules: { done: 0, total: 0 },
           tests: { averagePercent: 0, taken: 0 },
         };
 
-        const p = {
-          completedChapters: Array(summary.chapters?.done || 0).fill(0),
+        const done = Number((sum.chapters && sum.chapters.done) ?? 0);
+        const total = Number(
+          (sum.chapters && sum.chapters.total) ?? chapters.length
+        );
+        const taken = Number((sum.tests && sum.tests.taken) ?? 0);
+        const avg = Number((sum.tests && sum.tests.averagePercent) ?? 0);
+
+        nextProgressData[course.id] = {
+          completedChapters: Array(done).fill(0),
           courseTestResult: {
-            averagePercent: summary.tests?.averagePercent || 0,
-            taken: summary.tests?.taken || 0,
-            passed: (summary.tests?.averagePercent || 0) >= 60,
+            averagePercent: avg,
+            taken: taken,
+            passed: avg >= 60,
           },
           aiInterviewResult: null,
         };
-        progressData[course.id] = p;
 
-        aiStatusData[course.id] = {
-          eligible: (summary.tests?.averagePercent || 0) >= 60,
-          completed: Boolean(p?.aiInterviewResult),
-          result: p?.aiInterviewResult || null,
+        nextAiStatusData[course.id] = {
+          eligible: avg >= 60,
+          completed: false,
+          result: null,
         };
 
-        courseWithCounts.push({
+        nextCourseWithCounts.push({
           ...course,
-          totalChapters: summary.chapters?.total ?? chapters.length,
+          totalChapters: total,
         });
 
-        totalChaptersDone += summary.chapters?.done || 0;
-        const taken = summary.tests?.taken || 0;
-        const avg = summary.tests?.averagePercent || 0;
+        totalChaptersDone += done;
         weightedScoreSum += avg * taken;
         totalTestsTaken += taken;
-      }
+      });
 
-      setAssignedCourses(courseWithCounts);
-      setCurrentProgress(progressData);
-      setAiInterviewStatus(aiStatusData);
+      // Single state commit
+      setAssignedCourses(nextCourseWithCounts);
+      setCurrentProgress(nextProgressData);
+      setAiInterviewStatus(nextAiStatusData);
       setCompletedTests([]);
       setAvailableTests([]);
-
       setStats({
-        totalCourses: courseWithCounts.length,
+        totalCourses: nextCourseWithCounts.length,
         completedChapters: totalChaptersDone,
         averageTestScore: totalTestsTaken
           ? Math.round(weightedScoreSum / totalTestsTaken)
           : 0,
         totalTimeSpent: 0,
-        certificatesEarned: Object.values(aiStatusData).filter(
+        certificatesEarned: Object.values(nextAiStatusData).filter(
           (x) => x.completed
         ).length,
       });
     } catch (error) {
       console.error("Error fetching student data:", error);
       toast.error(
-        error?.response?.data?.error ||
-          error?.message ||
-          "Failed to load dashboard data"
+        (error &&
+          error.response &&
+          error.response.data &&
+          error.response.data.error) ||
+        (error && error.message) ||
+        "Failed to load dashboard data"
       );
     } finally {
       setLoading(false);
     }
+
+    // return cleanup so callers can use it inside useEffect
+    return () => abort.abort();
   };
 
   const goToCourse = async (courseId) => {
-    try {
-      const { data: chapters = [] } = await chaptersAPI.listByCourse(courseId);
-      const firstChapter = [...chapters].sort(
-        (a, b) => (a.order ?? 0) - (b.order ?? 0)
-      )[0];
+    if (!courseId) {
+      toast.error("Missing course id");
+      return;
+    }
+    const id = String(courseId);
+    const encodedId = encodeURIComponent(id);
+    setShowCourseModal?.(false);
+    navigate(`/courses/${encodedId}`);
 
-      navigate(`/courses/${courseId}`, {
-        state: { startChapterId: firstChapter?.id || null },
-      });
-    } catch {
-      navigate(`/courses/${courseId}`);
+    try {
+      const chapters = await chaptersAPI.listByCourse(id);
+      const firstChapter = (chapters ?? [])
+        .slice()
+        .sort((a, b) => (a?.order ?? 0) - (b?.order ?? 0))[0];
+
+      const startId = firstChapter?.id ?? null;
+      if (startId) {
+        navigate(`/courses/${encodedId}?start=${encodeURIComponent(startId)}`, {
+          state: { startChapterId: startId },
+          replace: true,
+        });
+      }
+    } catch (e) {
+      console.error("Failed to prefetch chapters:", e);
     }
   };
 
@@ -572,15 +613,17 @@ const fetchCoursesByIds = async (ids) => {
 
                             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                               <Button
+                                key={course.id}
+                                type="button"
                                 className="flex-1"
-                                onClick={() => {
-                                  setShowCourseModal(false);
-                                  goToCourse(course.id);
-                                }}
+                                onClick={() =>
+                                  goToCourse(course.courseId ?? course.course?.id ?? course.id)
+                                }
                               >
                                 <PlayCircle size={16} className="mr-2" />
                                 Continue Learning
                               </Button>
+
                               <Button
                                 size="sm"
                                 className="w-full sm:w-auto"
@@ -609,12 +652,12 @@ const fetchCoursesByIds = async (ids) => {
                                 )}
                                 {(nextAction.type === "course-test" ||
                                   nextAction.type === "module-test") && (
-                                  <FileText size={16} className="mr-1" />
-                                )}
+                                    <FileText size={16} className="mr-1" />
+                                  )}
                                 {(nextAction.type === "continue" ||
                                   nextAction.type === "start") && (
-                                  <Play size={16} className="mr-1" />
-                                )}
+                                    <Play size={16} className="mr-1" />
+                                  )}
                                 {nextAction.text}
                               </Button>
                             </div>
@@ -780,8 +823,8 @@ const fetchCoursesByIds = async (ids) => {
                               Completed{" "}
                               {status.result?.completedAt
                                 ? new Date(
-                                    status.result.completedAt
-                                  ).toLocaleDateString()
+                                  status.result.completedAt
+                                ).toLocaleDateString()
                                 : "--"}
                             </div>
                           ) : status.eligible ? (
@@ -849,11 +892,10 @@ const fetchCoursesByIds = async (ids) => {
                             ).toLocaleDateString()}
                           </span>
                           <span
-                            className={`text-xs font-medium ${
-                              test.result.passed
-                                ? "text-green-600"
-                                : "text-red-600"
-                            }`}
+                            className={`text-xs font-medium ${test.result.passed
+                              ? "text-green-600"
+                              : "text-red-600"
+                              }`}
                           >
                             {test.result.passed ? "PASSED" : "FAILED"}
                           </span>
@@ -893,10 +935,10 @@ const fetchCoursesByIds = async (ids) => {
                       value={
                         assignedCourses.length > 0
                           ? (Object.values(aiInterviewStatus).filter(
-                              (s) => s.completed
-                            ).length /
-                              assignedCourses.length) *
-                            100
+                            (s) => s.completed
+                          ).length /
+                            assignedCourses.length) *
+                          100
                           : 0
                       }
                       size="sm"

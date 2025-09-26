@@ -1,9 +1,7 @@
 import axios from "axios";
 import useAuthStore from "../store/useAuthStore";
-
+import { setAuthToken, getToken } from "./token";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
-
-/* ----------------------------- Utils & defaults ---------------------------- */
 
 export const FALLBACK_THUMB =
   "data:image/svg+xml;utf8," +
@@ -16,19 +14,16 @@ export const FALLBACK_THUMB =
   );
 
 export const makeHeaders = () => {
-  const token =
-    useAuthStore.getState().token || localStorage.getItem("auth_token");
+  const t = getToken();
   const headers = {
     "Content-Type": "application/json",
     "Cache-Control": "no-cache",
     Pragma: "no-cache",
     Expires: "0",
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (t) headers.Authorization = t.startsWith("Bearer ") ? t : `Bearer ${t}`;
   return headers;
 };
-
-/* ------------------------------- Axios client ------------------------------ */
 
 const api = axios.create({
   baseURL: `${API_BASE}/api`,
@@ -39,21 +34,6 @@ const api = axios.create({
     Expires: "0",
   },
 });
-let tokenCache = null;
-export const setAuthToken = (token) => {
-  tokenCache = token || null;
-  if (token) localStorage.setItem("auth_token", token);
-  else {
-    localStorage.removeItem("auth_token");
-    sessionStorage.removeItem("auth_token");
-  }
-};
-
-const getToken = () =>
-  tokenCache ||
-  sessionStorage.getItem("auth_token") ||
-  localStorage.getItem("auth_token") ||
-  null;
 
 api.interceptors.request.use(
   (config) => {
@@ -74,15 +54,15 @@ api.interceptors.response.use(
     const url = error?.config?.url || "";
     if (
       status === 401 &&
-      !["/auth/login", "/auth/registrations"].some((p) => url.includes(p))
+      !["/auth/login", "/auth/registrations", "/auth/signup"].some(p => url.includes(p))
     ) {
-      // just clear token & bounce; avoid importing the store here
       setAuthToken(null);
       window.location.assign("/login");
     }
     return Promise.reject(error);
   }
 );
+
 
 export async function fileToBase64(file) {
   if (!file) return "";
@@ -109,20 +89,17 @@ export const authAPI = {
     api.post("/auth/signup/verify", { email, otp }).then((r) => r.data),
   completeSignup: (payload) =>
     api.post("/signup/complete", payload).then((r) => r.data),
-me: async () => {
-  const raw = await api.get("/auth/me").then((r) => r.data);
+  me: async () => {
+    const raw = await api.get("/auth/me").then((r) => r.data);
 
-  const meUser = Array.isArray(raw) ? raw[0] : raw;
-  if (!meUser) return null;
+    const meUser = Array.isArray(raw) ? raw[0] : raw;
+    if (!meUser) return null;
 
-  const collegeId =
-    meUser.collegeId ??
-    meUser.college_id ??
-    meUser.college?.id ??
-    null;
+    const collegeId =
+      meUser.collegeId ?? meUser.college_id ?? meUser.college?.id ?? null;
 
-  return { ...meUser, collegeId }; // ✅ always flat
-},
+    return { ...meUser, collegeId }; // ✅ always flat
+  },
 
   logout: () => {
     useAuthStore.getState().logout();
@@ -166,15 +143,77 @@ export const superAdminAPI = {
   },
 };
 
+export const adminScopedAPI = {
+  overview: (collegeId) =>
+    api.get("/admin/overview", { params: { collegeId } }).then((r) => r.data),
+  instructors: (collegeId) =>
+    api
+      .get("/admin/instructors", { params: { collegeId } })
+      .then((r) => r.data),
+  students: (collegeId) =>
+    api.get("/admin/students", { params: { collegeId } }).then((r) => r.data),
+  courses: (collegeId, params = {}) =>
+    api
+      .get("/admin/courses", { params: { collegeId, ...params } })
+      .then((r) => r.data),
+};
+
 export const coursesAPI = {
+  get: async (id, params = {}) => {
+    const { user } = useAuthStore.getState();
+    const role = String(user?.role || "").toUpperCase();
+    const collegeId =
+      params.collegeId ?? user?.collegeId ?? user?.college?.id ?? null;
+
+    // Non-SA route for students/admins/instructors
+    if (role !== "SUPERADMIN") {
+      const { data } = await api.get(`/courses/${id}`, {
+        params: collegeId ? { ...params, collegeId } : params,
+      });
+      return data;
+    }
+
+    // SA detail if needed
+    const { data } = await api.get(`/superadmin/courses/${id}`, { params });
+    return data;
+  },
+
   list: async (params = {}) => {
     const { data } = await api.get("/superadmin/courses", { params });
 
     return data.data || data;
   },
 
-   getCourseCatalog: async ({
-    view,           
+  getStudentCourses: async (
+    collegeId,
+    studentId,
+    search = "",
+    status = "all",
+    category = "all",
+    scope = "assigned", // "assigned" | "enrolled"
+    page = 1,
+    pageSize = 20
+  ) => {
+    const view = scope === "assigned" ? "enrolled" : "catalog";
+
+    // Convert "all" into undefined so the server doesn't try to filter on literal "all"
+    const params = {
+      view,
+      collegeId: collegeId || undefined,
+      search: search?.trim() || undefined,
+      status: status !== "all" ? String(status) : undefined,
+      category: category !== "all" ? String(category) : undefined,
+      page: String(page),
+      pageSize: String(pageSize),
+    };
+
+    const resp = await api.get("/superadmin/courses", { params });
+    // Your calling code expects resp.data or resp.data.data; keep it consistent:
+    return resp; // caller does resp?.data
+  },
+
+  getCourseCatalog: async ({
+    view,
     collegeId,
     studentId,
     creatorId,
@@ -189,19 +228,17 @@ export const coursesAPI = {
       collegeId,
       studentId,
       creatorId,
-      search: searchTerm, 
+      search: searchTerm,
       status,
       category,
       page,
       pageSize,
     };
 
-     const { data } = await api.get("/superadmin/courses", { params });
-   
+    const { data } = await api.get("/superadmin/courses", { params });
+
     return data?.data ?? data;
   },
-  get: async (id, params = {}) =>
-    api.get(`/superadmin/courses/${id}`, { params }).then(r => r.data),
   create: async (payload) => {
     const { data } = await api.post("/superadmin/courses", payload);
     return data;
@@ -256,7 +293,7 @@ export const chaptersAPI = {
   listByCourse: (courseId) =>
     api.get(`/courses/${courseId}/chapters`).then((r) => r.data),
   getChapterDetails: (chapterId) =>
-    api.get(`/chapters/${chapterId}`).then((r) => r.data),
+     api.get(`/chapters/${chapterId}/view`).then(r => r.data),
   create: (courseId, payload) =>
     api.post(`/courses/${courseId}/chapters`, payload).then((r) => r.data),
   update: (chapterId, payload) =>
@@ -297,7 +334,9 @@ export const enrollmentsAPI = {
 
   // Admin: manually enroll a student
   enrollStudent: (courseId, studentId) =>
-    api.post(`/courses/${courseId}/enrollments`, { studentId }).then((r) => r.data),
+    api
+      .post(`/courses/${courseId}/enrollments`, { studentId })
+      .then((r) => r.data),
 
   // Admin: remove a student from a course
   unenroll: (enrollmentId) =>
@@ -320,17 +359,20 @@ export const enrollmentsAPI = {
 
   // Instructor: update single enrollment request status
   updateEnrollmentRequestStatus: (requestId, nextStatus) =>
-    api.patch(`/enrollment-requests/${requestId}`, { nextStatus }).then((r) => r.data),
+    api
+      .patch(`/enrollment-requests/${requestId}`, { nextStatus })
+      .then((r) => r.data),
 
   // Instructor: bulk update enrollment request statuses
   bulkUpdateEnrollmentRequests: (ids, nextStatus) =>
-    api.patch("/enrollment-requests/bulk", { ids, nextStatus }).then((r) => r.data),
+    api
+      .patch("/enrollment-requests/bulk", { ids, nextStatus })
+      .then((r) => r.data),
 
   // Instructor: list all pending enrollment requests across eligible courses
   listInstructorRequests: () =>
     api.get("/instructor/enrollment-requests").then((r) => r.data),
 };
-
 
 export const assessmentsAPI = {
   listByChapter: (chapterId) =>

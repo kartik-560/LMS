@@ -6,12 +6,13 @@ import { toast } from "react-hot-toast";
 import { authAPI } from "../services/api";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import useAuthStore from "../store/useAuthStore"; // Import Zustand store
+import useAuthStore from "../store/useAuthStore";
+import { setAuthToken } from "../services/token";
 
 const LoginPage = () => {
   const navigate = useNavigate();
 
-  const [step, setStep] = useState("choice"); // For Google/Email choice
+  const [step, setStep] = useState("choice");
   const [isLoading, setIsLoading] = useState(false);
 
   const {
@@ -26,69 +27,83 @@ const LoginPage = () => {
     INSTRUCTOR: "INSTRUCTOR",
     STUDENT: "STUDENT",
   };
-
-  // Google login handler
-  const handleGoogleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;  // Adjust URL as needed
-  };
-
   const normalizeRole = (raw) =>
     String(raw || "")
       .trim()
       .toUpperCase()
       .replace(/[^A-Z]/g, "_");
 
-  // Handle email signup
-  const handleEmailSignup = async ({ email, password }) => {
-    console.log("user.role", useAuthStore.getState().user?.role);
-    setIsLoading(true);
-    try {
-      const resp = await authAPI.login({ email, password });
-      const response = resp.data.data; // { user, token }
-      const user = response.user;
-      const token = response.token;
-
-      // Canonicalize role to one of ROLE values
-      const roleRaw = normalizeRole(user.role);
-      // Map common variants to canonical constants
-      const canonicalRole =
-        roleRaw === "SUPERADMIN" ? ROLE.SUPERADMIN :
-          roleRaw === "ADMIN" ? ROLE.ADMIN :
-            roleRaw === "INSTRUCTOR" ? ROLE.INSTRUCTOR :
-              ROLE.STUDENT;
-
-      // Persist
-      localStorage.setItem("auth_token", token);
-      localStorage.setItem("user_role", canonicalRole);
-      localStorage.setItem("user", JSON.stringify({ ...user, role: canonicalRole }));
-
-      // Zustand store
-      useAuthStore.getState().login({ ...user, role: canonicalRole }, token);
-
-      // Redirect by role
-      console.log("Login successful, role:", canonicalRole);
-      switch (canonicalRole) {
-        case ROLE.SUPERADMIN:
-          navigate("/superadmin", { replace: true });
-          break;
-        case ROLE.ADMIN:
-          navigate("/admin", { replace: true });
-          break;
-        case ROLE.INSTRUCTOR:
-          navigate("/instructor", { replace: true });
-          break;
-        default:
-          navigate("/dashboard", { replace: true }); // student
-      }
-
-      toast.success("Login successful!");
-    } catch (e) {
-      console.log("Login error:", e);
-      toast.error(e?.response?.data?.message || "Login failed");
-    } finally {
-      setIsLoading(false);
+  const getCanonicalRole = (u) => {
+    const candidates = [
+      u?.role,
+      u?.Role,
+      u?.userRole,
+      u?.roleName,
+      Array.isArray(u?.roles) ? u.roles[0] : undefined,
+      Array.isArray(u?.roles) && typeof u.roles[0] === "object"
+        ? u.roles[0]?.name
+        : undefined,
+    ];
+    const roleRaw = normalizeRole(candidates.find(Boolean));
+    switch (roleRaw) {
+      case "SUPERADMIN":
+        return ROLE.SUPERADMIN;
+      case "ADMIN":
+        return ROLE.ADMIN;
+      case "INSTRUCTOR":
+        return ROLE.INSTRUCTOR;
+      case "STUDENT":
+        return ROLE.STUDENT;
+      default:
+        return ROLE.STUDENT;
     }
   };
+
+  const handleGoogleLogin = () => {
+    window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;
+  };
+
+// LoginPage.jsx
+const handleEmailSignup = async ({ email, password }) => {
+  setIsLoading(true);
+  try {
+    const resp = await authAPI.login({ email, password });
+
+    // robust payload extraction
+    const payload = resp?.data?.data ?? resp?.data ?? resp;
+    const user = payload?.user;
+    const token = payload?.token;
+
+    if (!user || !token) throw new Error("Malformed login response");
+
+    const canonicalRole = getCanonicalRole(user);
+
+    // 🔑 Save the token so axios interceptor can attach Authorization header
+    setAuthToken(token); // <-- THIS is the key line
+
+    // (Optional but fine to keep if you use elsewhere)
+    localStorage.setItem("auth_token", token);
+    localStorage.setItem("user_role", canonicalRole);
+    localStorage.setItem("user", JSON.stringify({ ...user, role: canonicalRole }));
+
+    // Keep your Zustand update
+    useAuthStore.getState().login({ ...user, role: canonicalRole }, token);
+
+    // Navigate by role
+    switch (canonicalRole) {
+      case ROLE.SUPERADMIN:  navigate("/superadmin",  { replace: true }); break;
+      case ROLE.ADMIN:       navigate("/admin",       { replace: true }); break;
+      case ROLE.INSTRUCTOR:  navigate("/instructor",  { replace: true }); break;
+      default:               navigate("/dashboard",   { replace: true }); break;
+    }
+  } catch (e) {
+    console.error("Login error:", e);
+    toast.error(e?.response?.data?.message || e?.message || "Login failed");
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex flex-col justify-center py-8 px-4 sm:px-6 lg:px-8">
@@ -107,7 +122,6 @@ const LoginPage = () => {
             Login to access your learning account
           </p>
           <Link to="/signup">
-
             <div className="text-large text-blue-700">
               signup to your account
             </div>
@@ -119,7 +133,6 @@ const LoginPage = () => {
         <div className="bg-white py-6 px-4 sm:py-8 sm:px-10 shadow-xl sm:rounded-2xl border border-gray-100">
           {step === "choice" && (
             <div className="space-y-4">
-              {/* Google signup button */}
               <Button
                 onClick={handleGoogleLogin}
                 className="w-full flex items-center justify-center space-x-2"
@@ -133,7 +146,6 @@ const LoginPage = () => {
                 <span>Continue with Google</span>
               </Button>
 
-              {/* Email signup button */}
               <Button
                 onClick={() => setStep("email")}
                 variant="outline"
@@ -151,7 +163,6 @@ const LoginPage = () => {
               className="space-y-5 sm:space-y-6"
               onSubmit={handleSubmit(handleEmailSignup)}
             >
-              {/* Email input */}
               <Input
                 label="Email address"
                 type="email"
@@ -173,7 +184,6 @@ const LoginPage = () => {
                 className="pl-10"
               />
 
-              {/* Password input */}
               <Input
                 label="Password"
                 type="password"
@@ -210,7 +220,6 @@ const LoginPage = () => {
         </div>
       </div>
 
-      {/* Footer */}
       <div className="mt-6 sm:mt-8 text-center">
         <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-gray-500">
           <Link to="/help" className="hover:text-gray-700 transition-colors">

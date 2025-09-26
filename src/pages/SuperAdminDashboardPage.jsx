@@ -2,20 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
-  Shield,
-  Building2,
-  Users,
-  BookOpen,
-  Settings,
-  School,
-  Edit,
-  Trash2,
-  Award,
-  Search,
-  Save,
-  RotateCcw,
-  Pencil,
-  Plus,
+  Shield, Building2, Users, BookOpen, Settings, School, Edit, Trash2, Award, Search, Save, RotateCcw, Pencil, Plus,
 } from "lucide-react";
 
 import Card from "../components/ui/Card";
@@ -24,14 +11,11 @@ import Input from "../components/ui/Input";
 import Badge from "../components/ui/Badge";
 import Modal from "../components/ui/Modal";
 import Tabs, {
-  TabsList,
-  TabsTrigger,
-  TabsContent,
+  TabsList, TabsTrigger, TabsContent,
 } from "../components/ui/Tabs";
 import { useCallback } from "react";
 import useAuthStore from "../store/useAuthStore";
 
-// ✅ use your centralized API layer
 import { superAdminAPI, coursesAPI, collegesAPI } from "../services/api";
 
 const normalizeRole = (r) =>
@@ -81,6 +65,12 @@ export default function SuperAdminDashboardPage() {
 
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState("");
+
+
+  const [collegeDetailVM, setCollegeDetailVM] = useState(null);
+  const [collegeLoading, setCollegeLoading] = useState(false);
+  const [collegeError, setCollegeError] = useState("");
+
 
   const asArray = (p) => {
     if (Array.isArray(p)) return p;
@@ -137,36 +127,6 @@ export default function SuperAdminDashboardPage() {
         )}`,
     }));
 
-  // useEffect(() => { console.log("ADMINS", allAdmins); }, [allAdmins]);
-  // useEffect(() => { console.log("INSTRUCTORS", allInstructors); }, [allInstructors]);
-
-  // useEffect(() => {
-  //   let alive = true;
-
-  //   (async () => {
-  //     try {
-  //       setLoadingUsers(true);
-  //       const [adminsRaw, instructorsRaw] = await Promise.all([
-  //         superAdminAPI.getAdmins(),       // -> array
-  //         superAdminAPI.getInstructors(),  // -> array
-  //       ]);
-  //       if (!alive) return;
-  //       setAllAdmins(normalizeUsers(adminsRaw));
-  //       setAllInstructors(normalizeUsers(instructorsRaw));
-  //     } catch (e) {
-  //       if (!alive) return;
-  //       console.error(e);
-  //       setUsersError("Failed to load users.");
-  //     } finally {
-  //       if (alive) setLoadingUsers(false);
-  //     }
-  //   })();
-  //   return () => {
-  //     alive = false;
-  //   };
-  // }, []);
-
-  // Your filter (safe if role missing)
   const getFilteredUsers = (users, defaultRole) => {
     let filtered = Array.isArray(users) ? users : [];
 
@@ -211,6 +171,7 @@ export default function SuperAdminDashboardPage() {
     totalColleges: ov.totalColleges ?? ov.colleges ?? ov.collegeCount ?? 0,
   });
 
+
   const fetchSystemData = async () => {
     try {
       setLoading(true);
@@ -234,8 +195,7 @@ export default function SuperAdminDashboardPage() {
 
       const ov = extractOverview(overviewRaw);
       const normalizedOv = normalizeOverview(ov);
-      console.log("overviewRaw:", overviewRaw);
-      console.log("normalizedOverview:", normalizedOv);
+
 
       const admins = asArray(adminsRaw);
       const instructors = asArray(instructorsRaw);
@@ -305,7 +265,6 @@ export default function SuperAdminDashboardPage() {
     }
   };
 
-  // --- derived (unchanged) ---
   const collegesDerived = useMemo(() => {
     return (allAdmins || []).map((a) => {
       const managedCourseIds = (allCourses || [])
@@ -331,6 +290,7 @@ export default function SuperAdminDashboardPage() {
       const assignedCourses = (allCourses || []).filter(
         (c) => c.creatorId === a.id || c.managerId === a.id
       );
+
 
       return {
         id: a.id,
@@ -358,52 +318,76 @@ export default function SuperAdminDashboardPage() {
     );
   }, [colleges, collegesSearch]);
 
-  const getCollegeById = (id) =>
-    (colleges || []).find((c) => c.id === id) || null;
 
-  const getCollegeCourses = () => allCourses || [];
+  useEffect(() => {
+    if (!selectedCollegeId) return;
 
-  const getCollegeInstructors = (collegeId) => {
-    const college = getCollegeById(collegeId);
-    if (!college) return [];
-    return (allInstructors || []).map((instructor) => ({
-      ...instructor,
-      collegeName: college.name,
-      assignedCourseNames: (instructor.assignedCourses || [])
-        .map((courseId) => {
-          const course = (allCourses || []).find((c) => c.id === courseId);
-          return course ? course.title : "Unknown Course";
-        })
-        .filter((courseTitle) =>
-          college.managedCourseIds.some((courseId) => {
-            const course = (allCourses || []).find((c) => c.id === courseId);
-            return course && course.title === courseTitle;
-          })
-        ),
-    }));
-  };
+    const run = async () => {
+      setCollegeLoading(true);
+      setCollegeError("");
+      try {
+        const { data: raw } = await collegesAPI.getCollege(selectedCollegeId);
+        // Some backends wrap in { success, data }, so unwrap safely:
+        const payload = raw?.data ?? raw ?? {};
 
-  const getCollegeStudents = (collegeId) => {
-    const college = getCollegeById(collegeId);
-    if (!college) return [];
-    return (allStudents || []).map((student) => ({
-      ...student,
-      enrolledCourses: (student.assignedCourses || [])
-        .map((courseId) => {
-          const course = (allCourses || []).find((c) => c.id === courseId);
-          return course ? course.title : "Unknown Course";
-        })
-        .filter((courseTitle) =>
-          college.managedCourseIds.some((courseId) => {
-            const course = (allCourses || []).find((c) => c.id === courseId);
-            return course && course.title === courseTitle;
-          })
-        ),
-      finalTestsTaken: Math.floor(Math.random() * 5) + 1,
-      interviewsAttempted: Math.floor(Math.random() * 3) + 1,
-      certificationsCompleted: Math.floor(Math.random() * 3) + 1,
-    }));
-  };
+        const co = payload?.college ?? {};
+        const lists = payload?.lists ?? {};
+        const counts = payload?.counts ?? {};
+
+        const courses = lists?.courses ?? [];
+        const instructors = lists?.instructors ?? [];
+        const students = lists?.students ?? [];
+
+        const idToTitle = new Map(
+          courses.map((c) => [c.id, c.title || c.name || "Untitled Course"])
+        );
+        console.log("RAW college payload", payload);
+
+        const normInstructors = instructors.map((i) => {
+          const assigned = i.assignedCourseIds || i.assignedCourses || [];
+          return {
+            ...i,
+            collegeName: co?.name || "",
+            assignedCourseIds: assigned,
+            assignedCourseNames: assigned.map((cid) => idToTitle.get(cid)).filter(Boolean),
+          };
+        });
+
+        const normStudents = students.map((s) => {
+          const assigned = s.assignedCourseIds || s.assignedCourses || [];
+          return {
+            ...s,
+            assignedCourseIds: assigned,
+            enrolledCourses: assigned.map((cid) => idToTitle.get(cid)).filter(Boolean),
+            finalTestsTaken: Number.isFinite(s.finalTestsTaken) ? s.finalTestsTaken : 0,
+            interviewsAttempted: Number.isFinite(s.interviewsAttempted) ? s.interviewsAttempted : 0,
+            certificationsCompleted: Number.isFinite(s.certificationsCompleted) ? s.certificationsCompleted : 0,
+          };
+        });
+
+        // Keep the keys your UI reads: { college, lists, counts }
+        setCollegeDetailVM({
+          college: co,
+          lists: {
+            courses,
+            instructors: normInstructors,
+            students: normStudents,
+          },
+          counts, // e.g., { instructors, studentsAssigned, courses, studentsEnrolled, ... }
+        });
+      } catch (e) {
+        setCollegeError(e?.message || "Failed to load college");
+      } finally {
+        setCollegeLoading(false);
+      }
+    };
+
+    run();
+  }, [selectedCollegeId]);
+
+
+
+
 
   const getAdminCourses = (adminId) =>
     allCourses.filter(
@@ -437,14 +421,11 @@ export default function SuperAdminDashboardPage() {
   const canEditCourse = useCallback(
     (course) => {
       if (!course) return false;
-      // Superadmins can edit everything
       if (isSuperAdmin) return true;
 
-      // Admins can edit too; if you want to restrict admins to only their courses,
-      // replace the next line with the creator/manager check below.
+
       if (isAdminOnly) return true;
 
-      // Otherwise, allow if the current user is the creator/manager of the course
       const uid = user?.id;
       return course.creatorId === uid || course.managerId === uid;
     },
@@ -510,43 +491,6 @@ export default function SuperAdminDashboardPage() {
     collegesDerived,
   ]);
 
-  // pass defaultRole = "admin" for admins list, "instructor" for instructors list
-  // put this where your helpers live in the component
-  // const getFilteredUsers = (users, defaultRole) => {
-  //   let filtered = users || [];
-
-  //   // apply role filter only if not "all"
-  //   if (filterRole !== "all") {
-  //     filtered = filtered.filter(
-  //       (u) => String(u.role || defaultRole || "").toLowerCase() === filterRole
-  //     );
-  //   }
-
-  //   if (searchTerm) {
-  //     const q = searchTerm.toLowerCase();
-  //     filtered = filtered.filter(
-  //       (u) =>
-  //         String(u.name || "")
-  //           .toLowerCase()
-  //           .includes(q) ||
-  //         String(u.email || "")
-  //           .toLowerCase()
-  //           .includes(q)
-  //     );
-  //   }
-  //   return filtered;
-  // };
-
-  // const adminsToShow = useMemo(
-  //   () => getFilteredUsers(allAdmins, "admin"),
-  //   [allAdmins, filterRole, searchTerm]
-  // );
-  // const instructorsToShow = useMemo(
-  //   () => getFilteredUsers(allInstructors, "instructor"),
-  //   [allInstructors, filterRole, searchTerm]
-  // );
-
-  // --- mutations wired to api.js ---
   const toggleCourseActive = async (course) => {
     const prev = course.isActive ?? true;
     setCourseUpdatingId(course.id);
@@ -593,7 +537,7 @@ export default function SuperAdminDashboardPage() {
 
   const savePermissions = async () => {
     try {
-      // use superAdminAPI (server is mounted at /api/superadmin)
+
       await superAdminAPI.updateUserPermissions(
         selectedUser.id,
         editingPermissions
@@ -661,7 +605,6 @@ export default function SuperAdminDashboardPage() {
     );
   }
 
-  // --- UI: paste your existing JSX (unchanged) below ---
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
@@ -829,484 +772,443 @@ export default function SuperAdminDashboardPage() {
           {/* Colleges Tab */}
           <TabsContent value="colleges">
             {selectedCollegeId ? (
-              // College Detail View - Full Width
-              (() => {
-                const collegeId = selectedCollegeId;
-                const college = getCollegeById(collegeId) || {};
-                const collegeCourses = getCollegeCourses(collegeId) || [];
-                const collegeInstructors =
-                  getCollegeInstructors(collegeId) || [];
-                const collegeStudents = getCollegeStudents(collegeId) || [];
+              <>
+                {collegeLoading && (
+                  <div className="p-6 text-sm text-gray-500">Loading college…</div>
+                )}
 
-                return (
-                  <div className="space-y-6">
-                    {/* Back Button */}
-                    <div className="flex items-center gap-4">
-                      <button
-                        onClick={() => setSelectedCollegeId(null)}
-                        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition"
-                      >
-                        <svg
-                          className="w-5 h-5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 19l-7-7 7-7"
-                          />
-                        </svg>
-                        Back to College Directory
-                      </button>
-                    </div>
-
-                    {/* College Stats Card */}
-                    <Card className="p-6">
-                      <div className="flex items-center gap-4 mb-4">
-                        <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex-none">
-                          <img
-                            src={college.avatar}
-                            alt={college.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div>
-                          <h3 className="text-xl font-semibold text-gray-900">
-                            {college.name}
-                          </h3>
-                          <p className="text-sm text-gray-600">
-                            {college.email}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="text-center p-4 bg-blue-50 rounded-lg">
-                          <div className="text-2xl font-bold text-blue-600">
-                            {college.studentCount}
-                          </div>
-                          <div className="text-sm text-blue-800">
-                            Students Assigned
-                          </div>
-                        </div>
-                        <div className="text-center p-4 bg-green-50 rounded-lg">
-                          <div className="text-2xl font-bold text-green-600">
-                            {college.enrolledStudents}
-                          </div>
-                          <div className="text-sm text-green-800">
-                            Students Enrolled
-                          </div>
-                        </div>
-                        <div className="text-center p-4 bg-purple-50 rounded-lg">
-                          <div className="text-2xl font-bold text-purple-600">
-                            {college.certificatesGenerated}
-                          </div>
-                          <div className="text-sm text-purple-800">
-                            Certificates Generated
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-
-                    {/* College Sub-tabs */}
-                    <Card className="p-4">
-                      <div className="mb-4">
-                        <div className="flex gap-2 border-b border-gray-200">
-                          <button
-                            onClick={() => setCollegeDetailTab("instructors")}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
-                              collegeDetailTab === "instructors"
-                                ? "border-primary-500 text-primary-600"
-                                : "border-transparent text-gray-500 hover:text-gray-700"
-                            }`}
-                          >
-                            Instructors ({collegeInstructors.length})
-                          </button>
-                          <button
-                            onClick={() => setCollegeDetailTab("students")}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
-                              collegeDetailTab === "students"
-                                ? "border-primary-500 text-primary-600"
-                                : "border-transparent text-gray-500 hover:text-gray-700"
-                            }`}
-                          >
-                            Students ({collegeStudents.length})
-                          </button>
-                          <button
-                            onClick={() => setCollegeDetailTab("courses")}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
-                              collegeDetailTab === "courses"
-                                ? "border-primary-500 text-primary-600"
-                                : "border-transparent text-gray-500 hover:text-gray-700"
-                            }`}
-                          >
-                            Courses ({collegeCourses.length})
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Instructors Tab */}
-                      {collegeDetailTab === "instructors" && (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="text-xs text-gray-500 uppercase border-b border-gray-200">
-                                <th className="py-3 px-3 text-left">
-                                  Instructor
-                                </th>
-                                <th className="py-3 px-3 text-left">College</th>
-                                <th className="py-3 px-3 text-left">
-                                  Assigned Courses
-                                </th>
-                                <th className="py-3 px-3 text-center">
-                                  Actions
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {collegeInstructors.length === 0 ? (
-                                <tr>
-                                  <td
-                                    colSpan={4}
-                                    className="py-8 text-center text-gray-500"
-                                  >
-                                    No instructors assigned to this college.
-                                  </td>
-                                </tr>
-                              ) : (
-                                collegeInstructors.map((instructor) => (
-                                  <tr
-                                    key={instructor.id}
-                                    className="border-b border-gray-100 hover:bg-gray-50 transition"
-                                  >
-                                    <td className="py-4 px-3">
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex-none">
-                                          <img
-                                            src={instructor.avatar}
-                                            alt={instructor.name}
-                                            className="w-full h-full object-cover"
-                                          />
-                                        </div>
-                                        <div className="min-w-0">
-                                          <h4 className="font-medium text-gray-900 truncate">
-                                            {instructor.name}
-                                          </h4>
-                                          <p className="text-sm text-gray-600 truncate">
-                                            {instructor.email}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    </td>
-                                    <td className="py-4 px-3">
-                                      <span className="font-medium text-gray-900">
-                                        {instructor.collegeName}
-                                      </span>
-                                    </td>
-                                    <td className="py-4 px-3">
-                                      <div className="flex flex-wrap gap-1">
-                                        {instructor.assignedCourseNames.length >
-                                        0 ? (
-                                          instructor.assignedCourseNames.map(
-                                            (courseName, index) => (
-                                              <Badge
-                                                key={index}
-                                                variant="outline"
-                                                size="sm"
-                                              >
-                                                {courseName}
-                                              </Badge>
-                                            )
-                                          )
-                                        ) : (
-                                          <span className="text-gray-400 text-xs">
-                                            No courses assigned
-                                          </span>
-                                        )}
-                                      </div>
-                                    </td>
-                                    <td className="py-4 px-3">
-                                      <div className="flex gap-2 justify-center">
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => {
-                                            // TODO: Implement edit instructor functionality
-                                            toast.info(
-                                              "Edit instructor functionality coming soon!"
-                                            );
-                                          }}
-                                          className="flex items-center gap-1"
-                                        >
-                                          <Edit size={14} />
-                                          Edit
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => {
-                                            // TODO: Implement delete instructor functionality
-                                            toast.error(
-                                              "Delete instructor functionality coming soon!"
-                                            );
-                                          }}
-                                          className="flex items-center gap-1 text-red-600 hover:text-red-700 hover:border-red-300"
-                                        >
-                                          <Trash2 size={14} />
-                                          Delete
-                                        </Button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-
-                      {/* Students Tab */}
-                      {collegeDetailTab === "students" && (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="text-xs text-gray-500 uppercase border-b border-gray-200">
-                                <th className="py-3 px-4 text-left">Student</th>
-                                <th className="py-3 px-4 text-left">
-                                  Courses Enrolled
-                                </th>
-                                <th className="py-3 px-4 text-left">
-                                  Course Names
-                                </th>
-                                <th className="py-3 px-4 text-left">
-                                  Final Tests
-                                </th>
-                                <th className="py-3 px-4 text-left">
-                                  Interviews
-                                </th>
-                                <th className="py-3 px-4 text-left">
-                                  Certifications
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {collegeStudents.length === 0 ? (
-                                <tr>
-                                  <td
-                                    colSpan={6}
-                                    className="py-8 text-center text-gray-500"
-                                  >
-                                    No students enrolled in this college.
-                                  </td>
-                                </tr>
-                              ) : (
-                                collegeStudents.map((student) => (
-                                  <tr
-                                    key={student.id}
-                                    className="border-b border-gray-100 hover:bg-gray-50 transition"
-                                  >
-                                    <td className="py-4 px-4">
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex-none">
-                                          <img
-                                            src={student.avatar}
-                                            alt={student.name}
-                                            className="w-full h-full object-cover"
-                                          />
-                                        </div>
-                                        <div className="min-w-0">
-                                          <h4 className="font-medium text-gray-900 truncate">
-                                            {student.name}
-                                          </h4>
-                                          <p className="text-sm text-gray-600 truncate">
-                                            {student.email}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    </td>
-                                    <td className="py-4 px-4">
-                                      <div className="text-center">
-                                        <Badge variant="info" size="sm">
-                                          {student.enrolledCourses.length}
-                                        </Badge>
-                                      </div>
-                                    </td>
-                                    <td className="py-4 px-4">
-                                      <div className="flex flex-wrap gap-1">
-                                        {student.enrolledCourses.length > 0 ? (
-                                          student.enrolledCourses.map(
-                                            (courseName, index) => (
-                                              <Badge
-                                                key={index}
-                                                variant="outline"
-                                                size="sm"
-                                              >
-                                                {courseName}
-                                              </Badge>
-                                            )
-                                          )
-                                        ) : (
-                                          <span className="text-gray-400 text-xs">
-                                            No courses
-                                          </span>
-                                        )}
-                                      </div>
-                                    </td>
-                                    <td className="py-4 px-4">
-                                      <div className="text-center">
-                                        <span className="font-medium text-blue-600">
-                                          {student.finalTestsTaken}
-                                        </span>
-                                      </div>
-                                    </td>
-                                    <td className="py-4 px-4">
-                                      <div className="text-center">
-                                        <span className="font-medium text-green-600">
-                                          {student.interviewsAttempted}
-                                        </span>
-                                      </div>
-                                    </td>
-                                    <td className="py-4 px-4">
-                                      <div className="text-center">
-                                        <span className="font-medium text-purple-600">
-                                          {student.certificationsCompleted}
-                                        </span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-
-                      {/* Courses Tab */}
-                      {collegeDetailTab === "courses" && (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="text-xs text-gray-500 uppercase border-b border-gray-200">
-                                <th className="py-3 px-4 text-left">Course</th>
-                                <th className="py-3 px-4 text-left">Status</th>
-                                <th className="py-3 px-4 text-left">
-                                  Toggle Active
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {collegeCourses.length === 0 ? (
-                                <tr>
-                                  <td
-                                    colSpan={3}
-                                    className="py-8 text-center text-gray-500"
-                                  >
-                                    No courses assigned to this college.
-                                  </td>
-                                </tr>
-                              ) : (
-                                collegeCourses.map((course) => (
-                                  <tr
-                                    key={course.id}
-                                    className="border-b border-gray-100 hover:bg-gray-50 transition"
-                                  >
-                                    <td className="py-4 px-4">
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 flex-none">
-                                          <img
-                                            src={course.thumbnail}
-                                            alt={course.title}
-                                            className="w-full h-full object-cover"
-                                          />
-                                        </div>
-                                        <div className="min-w-0">
-                                          <h4 className="font-medium text-gray-900 truncate">
-                                            {course.title}
-                                          </h4>
-                                          <p className="text-sm text-gray-600 truncate">
-                                            {course.description ||
-                                              "No description"}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    </td>
-                                    <td className="py-4 px-4">
-                                      <Badge
-                                        variant={
-                                          course.isActive ?? true
-                                            ? "success"
-                                            : "secondary"
-                                        }
-                                        size="sm"
-                                      >
-                                        {course.isActive ?? true
-                                          ? "Active"
-                                          : "Inactive"}
-                                      </Badge>
-                                    </td>
-                                    <td className="py-4 px-4">
-                                      <button
-                                        disabled={
-                                          courseUpdatingId === course.id
-                                        }
-                                        onClick={() =>
-                                          toggleCourseActive(course)
-                                        }
-                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                          course.isActive ?? true
-                                            ? "bg-primary-600"
-                                            : "bg-gray-200"
-                                        }`}
-                                      >
-                                        <span
-                                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                            course.isActive ?? true
-                                              ? "translate-x-6"
-                                              : "translate-x-1"
-                                          }`}
-                                        />
-                                        {courseUpdatingId === course.id && (
-                                          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                                            <svg
-                                              className="animate-spin h-4 w-4 text-primary-600"
-                                              xmlns="http://www.w3.org/2000/svg"
-                                              fill="none"
-                                              viewBox="0 0 24 24"
-                                            >
-                                              <circle
-                                                className="opacity-25"
-                                                cx="12"
-                                                cy="12"
-                                                r="10"
-                                                stroke="currentColor"
-                                                strokeWidth="4"
-                                              ></circle>
-                                              <path
-                                                className="opacity-75"
-                                                fill="currentColor"
-                                                d="M4 12a8 8 0 018-8v8z"
-                                              ></path>
-                                            </svg>
-                                          </span>
-                                        )}
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </Card>
+                {!collegeLoading && collegeError && (
+                  <div className="p-6">
+                    <p className="text-sm text-red-600">{collegeError}</p>
+                    <button
+                      onClick={() => setSelectedCollegeId(null)}
+                      className="mt-3 text-primary-600 underline"
+                    >
+                      Back to College Directory
+                    </button>
                   </div>
-                );
-              })()
+                )}
+
+                {!collegeLoading && !collegeError && collegeDetailVM && (() => {
+                  const { college, lists, counts } = collegeDetailVM || {};
+                  const collegeCourses = lists?.courses ?? [];
+                  const collegeInstructors = lists?.instructors ?? [];
+                  const collegeStudents = lists?.students ?? [];
+                  const stats = {
+                    studentCount: counts?.studentsAssigned ?? 0,
+                    enrolledStudents: counts?.studentsEnrolled ?? 0,
+                    certificatesGenerated: counts?.certificatesGenerated ?? 0,
+                  };
+
+                  return (
+                    <div className="space-y-6">
+                      {/* Back Button */}
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => setSelectedCollegeId(null)}
+                          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition"
+                        >
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15 19l-7-7 7-7"
+                            />
+                          </svg>
+                          Back to College Directory
+                        </button>
+                      </div>
+
+                      {/* College Stats Card */}
+                      <Card className="p-6">
+                        <div className="flex items-center gap-4 mb-4">
+                          <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex-none">
+                            <img
+                              src={
+                                college?.avatar ||
+                                `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                  college?.name || "College"
+                                )}&background=random`
+                              }
+                              alt={college?.name || "College"}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-semibold text-gray-900">
+                              {college?.name || "—"}
+                            </h3>
+                            <p className="text-sm text-gray-600">{college?.email || ""}</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="text-center p-4 bg-blue-50 rounded-lg">
+                            <div className="text-2xl font-bold text-blue-600">
+                              {stats.studentCount}
+                            </div>
+                            <div className="text-sm text-blue-800">Students Assigned</div>
+                          </div>
+                          <div className="text-center p-4 bg-green-50 rounded-lg">
+                            <div className="text-2xl font-bold text-green-600">
+                              {stats.enrolledStudents}
+                            </div>
+                            <div className="text-sm text-green-800">Students Enrolled</div>
+                          </div>
+                          <div className="text-center p-4 bg-purple-50 rounded-lg">
+                            <div className="text-2xl font-bold text-purple-600">
+                              {stats.certificatesGenerated}
+                            </div>
+                            <div className="text-sm text-purple-800">
+                              Certificates Generated
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+
+                      {/* College Sub-tabs */}
+                      <Card className="p-4">
+                        <div className="mb-4">
+                          <div className="flex gap-2 border-b border-gray-200">
+                            <button
+                              onClick={() => setCollegeDetailTab("instructors")}
+                              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${collegeDetailTab === "instructors"
+                                ? "border-primary-500 text-primary-600"
+                                : "border-transparent text-gray-500 hover:text-gray-700"
+                                }`}
+                            >
+                              Instructors ({collegeInstructors.length})
+                            </button>
+                            <button
+                              onClick={() => setCollegeDetailTab("students")}
+                              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${collegeDetailTab === "students"
+                                ? "border-primary-500 text-primary-600"
+                                : "border-transparent text-gray-500 hover:text-gray-700"
+                                }`}
+                            >
+                              Students ({collegeStudents.length})
+                            </button>
+                            <button
+                              onClick={() => setCollegeDetailTab("courses")}
+                              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${collegeDetailTab === "courses"
+                                ? "border-primary-500 text-primary-600"
+                                : "border-transparent text-gray-500 hover:text-gray-700"
+                                }`}
+                            >
+                              Courses ({collegeCourses.length})
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Instructors Tab */}
+                        {collegeDetailTab === "instructors" && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-gray-500 uppercase border-b border-gray-200">
+                                  <th className="py-3 px-3 text-left">Instructor</th>
+                                  <th className="py-3 px-3 text-left">College</th>
+                                  <th className="py-3 px-3 text-left">Assigned Courses</th>
+                                  <th className="py-3 px-3 text-center">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {collegeInstructors.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={4} className="py-8 text-center text-gray-500">
+                                      No instructors assigned to this college.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  collegeInstructors.map((instructor) => (
+                                    <tr
+                                      key={instructor.id}
+                                      className="border-b border-gray-100 hover:bg-gray-50 transition"
+                                    >
+                                      <td className="py-4 px-3">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex-none">
+                                            <img
+                                              src={
+                                                instructor.avatar ||
+                                                `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                                  instructor.name || "Instructor"
+                                                )}&background=random`
+                                              }
+                                              alt={instructor.name || "Instructor"}
+                                              className="w-full h-full object-cover"
+                                            />
+                                          </div>
+                                          <div className="min-w-0">
+                                            <h4 className="font-medium text-gray-900 truncate">
+                                              {instructor.name || "—"}
+                                            </h4>
+                                            <p className="text-sm text-gray-600 truncate">
+                                              {instructor.email || ""}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="py-4 px-3">
+                                        <span className="font-medium text-gray-900">
+                                          {instructor.collegeName || college?.name || "—"}
+                                        </span>
+                                      </td>
+                                      <td className="py-4 px-3">
+                                        <div className="flex flex-wrap gap-1">
+                                          {(instructor.assignedCourseNames ?? []).length > 0 ? (
+                                            instructor.assignedCourseNames.map((courseName, index) => (
+                                              <Badge key={index} variant="outline" size="sm">
+                                                {courseName}
+                                              </Badge>
+                                            ))
+                                          ) : (
+                                            <span className="text-gray-400 text-xs">
+                                              No courses assigned
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="py-4 px-3">
+                                        <div className="flex gap-2 justify-center">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => toast.info("Edit instructor coming soon")}
+                                            className="flex items-center gap-1"
+                                          >
+                                            <Edit size={14} />
+                                            Edit
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => toast.error("Delete instructor coming soon")}
+                                            className="flex items-center gap-1 text-red-600 hover:text-red-700 hover:border-red-300"
+                                          >
+                                            <Trash2 size={14} />
+                                            Delete
+                                          </Button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Students Tab */}
+                        {collegeDetailTab === "students" && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-gray-500 uppercase border-b border-gray-200">
+                                  <th className="py-3 px-4 text-left">Student</th>
+                                  <th className="py-3 px-4 text-left">Courses Enrolled</th>
+                                  <th className="py-3 px-4 text-left">Final Tests</th>
+                                  <th className="py-3 px-4 text-left">Interviews</th>
+                                  <th className="py-3 px-4 text-left">Certifications</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {collegeStudents.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={5} className="py-8 text-center text-gray-500">
+                                      No students enrolled in this college.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  collegeStudents.map((student) => (
+                                    <tr
+                                      key={student.id}
+                                      className="border-b border-gray-100 hover:bg-gray-50 transition"
+                                    >
+                                      <td className="py-4 px-4">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex-none">
+                                            <img
+                                              src={
+                                                student.avatar ||
+                                                `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                                  student.name || "Student"
+                                                )}&background=random`
+                                              }
+                                              alt={student.name || "Student"}
+                                              className="w-full h-full object-cover"
+                                            />
+                                          </div>
+                                          <div className="min-w-0">
+                                            <h4 className="font-medium text-gray-900 truncate">
+                                              {student.name || "—"}
+                                            </h4>
+                                            <p className="text-sm text-gray-600 truncate">
+                                              {student.email || ""}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </td>
+
+                                      {/* Courses Enrolled: count + list in one cell */}
+                                      <td className="py-4 px-4">
+                                        <div className="flex items-start gap-2">
+                                          <Badge variant="info" size="sm">
+                                            {(student.enrolledCourses ?? []).length}
+                                          </Badge>
+                                          <div className="flex flex-wrap gap-1">
+                                            {(student.enrolledCourses ?? []).length > 0 ? (
+                                              student.enrolledCourses.map((courseName, index) => (
+                                                <Badge key={index} variant="outline" size="sm">
+                                                  {courseName}
+                                                </Badge>
+                                              ))
+                                            ) : (
+                                              <span className="text-gray-400 text-xs">No courses</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+
+                                      <td className="py-4 px-4">
+                                        <div className="text-center">
+                                          <span className="font-medium text-blue-600">
+                                            {student.finalTestsTaken ?? 0}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td className="py-4 px-4">
+                                        <div className="text-center">
+                                          <span className="font-medium text-green-600">
+                                            {student.interviewsAttempted ?? 0}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td className="py-4 px-4">
+                                        <div className="text-center">
+                                          <span className="font-medium text-purple-600">
+                                            {student.certificationsCompleted ?? 0}
+                                          </span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+
+                          </div>
+                        )}
+
+                        {/* Courses Tab */}
+                        {collegeDetailTab === "courses" && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-gray-500 uppercase border-b border-gray-200">
+                                  <th className="py-3 px-4 text-left">Course</th>
+                                  <th className="py-3 px-4 text-left">Status</th>
+                                  <th className="py-3 px-4 text-left">Toggle Active</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {collegeCourses.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={3} className="py-8 text-center text-gray-500">
+                                      No courses assigned to this college.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  collegeCourses.map((course) => {
+                                    const active =
+                                      (course.status || "").toLowerCase() === "published";
+                                    return (
+                                      <tr
+                                        key={course.id}
+                                        className="border-b border-gray-100 hover:bg-gray-50 transition"
+                                      >
+                                        <td className="py-4 px-4">
+                                          <div className="flex items-center gap-3">
+                                            <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 flex-none">
+                                              <img
+                                                src={course.thumbnail || "/placeholder.png"}
+                                                alt={course.title}
+                                                className="w-full h-full object-cover"
+                                              />
+                                            </div>
+                                            <div className="min-w-0">
+                                              <h4 className="font-medium text-gray-900 truncate">
+                                                {course.title}
+                                              </h4>
+                                              <p className="text-sm text-gray-600 truncate">
+                                                {course.description || "No description"}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                          <Badge variant={active ? "success" : "secondary"} size="sm">
+                                            {active ? "Active" : "Inactive"}
+                                          </Badge>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                          <button
+                                            disabled={courseUpdatingId === course.id}
+                                            onClick={() => toggleCourseActive(course)}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${active ? "bg-primary-600" : "bg-gray-200"
+                                              }`}
+                                          >
+                                            <span
+                                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${active ? "translate-x-6" : "translate-x-1"
+                                                }`}
+                                            />
+                                            {courseUpdatingId === course.id && (
+                                              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                                                <svg
+                                                  className="animate-spin h-4 w-4 text-primary-600"
+                                                  xmlns="http://www.w3.org/2000/svg"
+                                                  fill="none"
+                                                  viewBox="0 0 24 24"
+                                                >
+                                                  <circle
+                                                    className="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    strokeWidth="4"
+                                                  ></circle>
+                                                  <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8v8z"
+                                                  ></path>
+                                                </svg>
+                                              </span>
+                                            )}
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </Card>
+                    </div>
+                  );
+                })()}
+              </>
             ) : (
-              // College Directory - Full Width
+
               <Card className="p-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
                   College Directory
@@ -1333,7 +1235,7 @@ export default function SuperAdminDashboardPage() {
                         <th className="py-3 px-4 text-left">Enrolled</th>
                         <th className="py-3 px-4 text-left">Courses</th>
                         <th className="py-3 px-4 text-left">Certificates</th>
-                        <th className="py-3 px-4 text-left">Course Names</th>
+
                       </tr>
                     </thead>
                     <tbody>
@@ -1358,11 +1260,10 @@ export default function SuperAdminDashboardPage() {
                           return (
                             <tr
                               key={college.id}
-                              className={`border-b border-gray-100 hover:bg-gray-50 transition cursor-pointer ${
-                                selectedCollegeId === college.id
-                                  ? "bg-primary-50"
-                                  : ""
-                              }`}
+                              className={`border-b border-gray-100 hover:bg-gray-50 transition cursor-pointer ${selectedCollegeId === college.id
+                                ? "bg-primary-50"
+                                : ""
+                                }`}
                               onClick={() => setSelectedCollegeId(college.id)}
                             >
                               <td className="py-4 px-4">
@@ -1430,34 +1331,7 @@ export default function SuperAdminDashboardPage() {
                                 </div>
                               </td>
 
-                              <td className="py-4 px-4">
-                                <div className="flex flex-wrap gap-1">
-                                  {assigned.length > 0 ? (
-                                    <>
-                                      {assigned
-                                        .slice(0, 2)
-                                        .map((courseName, i) => (
-                                          <Badge
-                                            key={i}
-                                            variant="outline"
-                                            size="sm"
-                                          >
-                                            {courseName}
-                                          </Badge>
-                                        ))}
-                                      {assigned.length > 2 && (
-                                        <Badge variant="outline" size="sm">
-                                          +{assigned.length - 2} more
-                                        </Badge>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <span className="text-gray-400 text-xs">
-                                      No courses
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
+
                             </tr>
                           );
                         })
@@ -1471,7 +1345,7 @@ export default function SuperAdminDashboardPage() {
 
           <TabsContent value="permissions">
             <div className="space-y-6">
-              {/* Search + role buttons */}
+
               <Card className="p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
                   <div className="sm:col-span-2">
@@ -1490,11 +1364,10 @@ export default function SuperAdminDashboardPage() {
                       onClick={() =>
                         setFilterRole((r) => (r === "admin" ? "all" : "admin"))
                       }
-                      className={`px-4 py-2 rounded-lg border ${
-                        filterRole === "admin"
-                          ? "bg-primary-500 text-white border-primary-500"
-                          : "bg-white text-gray-700 border-gray-300"
-                      }`}
+                      className={`px-4 py-2 rounded-lg border ${filterRole === "admin"
+                        ? "bg-primary-500 text-white border-primary-500"
+                        : "bg-white text-gray-700 border-gray-300"
+                        }`}
                     >
                       Admins
                     </button>
@@ -1504,11 +1377,10 @@ export default function SuperAdminDashboardPage() {
                           r === "instructor" ? "all" : "instructor"
                         )
                       }
-                      className={`px-4 py-2 rounded-lg border ${
-                        filterRole === "instructor"
-                          ? "bg-primary-500 text-white border-primary-500"
-                          : "bg-white text-gray-700 border-gray-300"
-                      }`}
+                      className={`px-4 py-2 rounded-lg border ${filterRole === "instructor"
+                        ? "bg-primary-500 text-white border-primary-500"
+                        : "bg-white text-gray-700 border-gray-300"
+                        }`}
                     >
                       Instructors
                     </button>
@@ -1897,16 +1769,16 @@ export default function SuperAdminDashboardPage() {
                                     <div className="flex gap-1 flex-wrap">
                                       {instructor.permissions
                                         ?.canCreateCourses && (
-                                        <Badge variant="success" size="sm">
-                                          Course
-                                        </Badge>
-                                      )}
+                                          <Badge variant="success" size="sm">
+                                            Course
+                                          </Badge>
+                                        )}
                                       {instructor.permissions
                                         ?.canCreateTests && (
-                                        <Badge variant="warning" size="sm">
-                                          Test
-                                        </Badge>
-                                      )}
+                                          <Badge variant="warning" size="sm">
+                                            Test
+                                          </Badge>
+                                        )}
                                     </div>
                                   </div>
                                 ))}
@@ -1964,10 +1836,10 @@ export default function SuperAdminDashboardPage() {
 
           <TabsContent value="students">
             <div className="space-y-6">
-              {/* Search + filter card */}
+
               <Card className="p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-center">
-                  {/* Filter Button */}
+
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -1977,8 +1849,8 @@ export default function SuperAdminDashboardPage() {
                           studentFilter === "all"
                             ? "college"
                             : studentFilter === "college"
-                            ? "course"
-                            : "all"
+                              ? "course"
+                              : "all"
                         );
                         setSelectedFilterValue("");
                       }}
@@ -1988,8 +1860,8 @@ export default function SuperAdminDashboardPage() {
                       {studentFilter === "all"
                         ? "Filter"
                         : studentFilter === "college"
-                        ? "College"
-                        : "Course"}
+                          ? "College"
+                          : "Course"}
                     </Button>
 
                     {studentFilter !== "all" && (
@@ -2024,7 +1896,7 @@ export default function SuperAdminDashboardPage() {
                     </div>
                   </div>
 
-                  {/* Total Count */}
+
                   <Badge variant="info" className="justify-center">
                     {getFilteredStudents().length} of {allStudents.length}
                   </Badge>
@@ -2080,7 +1952,7 @@ export default function SuperAdminDashboardPage() {
                                 <Badge
                                   variant={
                                     String(student.status).toLowerCase() ===
-                                    "active"
+                                      "active"
                                       ? "success"
                                       : "secondary"
                                   }
@@ -2165,7 +2037,7 @@ export default function SuperAdminDashboardPage() {
                   <Badge
                     variant={
                       String(selectedUser.role).toLowerCase() === "admin" ||
-                      String(selectedUser.role).toUpperCase() === "SUPERADMIN"
+                        String(selectedUser.role).toUpperCase() === "SUPERADMIN"
                         ? "danger"
                         : "warning"
                     }
@@ -2233,60 +2105,58 @@ export default function SuperAdminDashboardPage() {
                 <div className="space-y-4">
                   {(String(selectedUser.role).toLowerCase() === "admin" ||
                     String(selectedUser.role).toUpperCase() ===
-                      "SUPERADMIN") && (
-                    <>
-                      {[
-                        {
-                          key: "canCreateCourses",
-                          title: "Create Courses",
-                          desc: "Allow user to create new courses",
-                        },
-                        {
-                          key: "canCreateTests",
-                          title: "Create Tests",
-                          desc: "Allow user to create and manage tests",
-                        },
-                        {
-                          key: "canManageTests",
-                          title: "Manage Tests",
-                          desc: "Allow user to edit and delete tests",
-                        },
-                      ].map((item) => (
-                        <div
-                          key={item.key}
-                          className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
-                        >
-                          <div className="pr-4">
-                            <h5 className="font-medium text-gray-900">
-                              {item.title}
-                            </h5>
-                            <p className="text-sm text-gray-600">{item.desc}</p>
-                          </div>
-                          <button
-                            onClick={() =>
-                              setEditingPermissions((p) => ({
-                                ...p,
-                                [item.key]: !p[item.key],
-                              }))
-                            }
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                              editingPermissions[item.key]
+                    "SUPERADMIN") && (
+                      <>
+                        {[
+                          {
+                            key: "canCreateCourses",
+                            title: "Create Courses",
+                            desc: "Allow user to create new courses",
+                          },
+                          {
+                            key: "canCreateTests",
+                            title: "Create Tests",
+                            desc: "Allow user to create and manage tests",
+                          },
+                          {
+                            key: "canManageTests",
+                            title: "Manage Tests",
+                            desc: "Allow user to edit and delete tests",
+                          },
+                        ].map((item) => (
+                          <div
+                            key={item.key}
+                            className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
+                          >
+                            <div className="pr-4">
+                              <h5 className="font-medium text-gray-900">
+                                {item.title}
+                              </h5>
+                              <p className="text-sm text-gray-600">{item.desc}</p>
+                            </div>
+                            <button
+                              onClick={() =>
+                                setEditingPermissions((p) => ({
+                                  ...p,
+                                  [item.key]: !p[item.key],
+                                }))
+                              }
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editingPermissions[item.key]
                                 ? "bg-primary-600"
                                 : "bg-gray-200"
-                            }`}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                editingPermissions[item.key]
+                                }`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editingPermissions[item.key]
                                   ? "translate-x-6"
                                   : "translate-x-1"
-                              }`}
-                            />
-                          </button>
-                        </div>
-                      ))}
-                    </>
-                  )}
+                                  }`}
+                              />
+                            </button>
+                          </div>
+                        ))}
+                      </>
+                    )}
 
                   {String(selectedUser.role).toLowerCase() === "instructor" && (
                     <>
@@ -2334,18 +2204,16 @@ export default function SuperAdminDashboardPage() {
                                 [item.key]: !p[item.key],
                               }))
                             }
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                              editingPermissions[item.key]
-                                ? "bg-primary-600"
-                                : "bg-gray-200"
-                            }`}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editingPermissions[item.key]
+                              ? "bg-primary-600"
+                              : "bg-gray-200"
+                              }`}
                           >
                             <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                editingPermissions[item.key]
-                                  ? "translate-x-6"
-                                  : "translate-x-1"
-                              }`}
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editingPermissions[item.key]
+                                ? "translate-x-6"
+                                : "translate-x-1"
+                                }`}
                             />
                           </button>
                         </div>
@@ -2434,7 +2302,7 @@ export default function SuperAdminDashboardPage() {
           </div>
         </Modal>
 
-        {/* Delete Student Confirmation Modal */}
+
         <Modal
           isOpen={showDeleteModal}
           onClose={() => {
