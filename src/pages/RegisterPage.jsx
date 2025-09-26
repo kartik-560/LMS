@@ -11,11 +11,11 @@ import useAuthStore from "../store/useAuthStore";
 // import collegeIcon from "./assets/college.png";
 
 // Import your user icon image
-<<<<<<< HEAD
+
 // import userIcon from "../assets/user.png";
-=======
+
 import userIcon from "../assets/user.jpg";
->>>>>>> 4b8a91d531e57e6ab5942895b563310e29ad5f15
+
 
 const ALL_ROLES = [
   { id: "student", title: "Student", icon: <User size={24} />, color: "bg-blue-100 text-blue-600" },

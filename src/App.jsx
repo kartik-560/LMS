@@ -14,19 +14,13 @@ import RegisterPage from "./pages/RegisterPage";
 import Terms from "./pages/TermsPage";
 import Privacy from "./pages/PrivacyPage";
 import EditCoursePage from "./pages/EditCoursePage";
-<<<<<<< HEAD
-import FirstLoginPage from "./pages/FirstLoginPage";
 
+// ✅ uncomment these when the files exist
+// import Signup from "./pages/Signup";
+// import Register from "./pages/Register";
+// import AddcollegePage from "./pages/AddcollegePage";
 
-// Protected Route Component
-const ProtectedRoute = ({ children, allowedRoles = [] }) => {
-  const { isAuthenticated, userRole } = useAuthStore();
-=======
-import Signup from "./pages/Signup";
-import Register from "./pages/Register";
-import AddcollegePage from "./pages/AddcollegePage";
->>>>>>> 4b8a91d531e57e6ab5942895b563310e29ad5f15
-
+// ------------------ Role Setup ------------------
 const ROLE = {
   SUPERADMIN: "SUPERADMIN",
   ADMIN: "ADMIN",
@@ -47,6 +41,7 @@ const roleHome = {
   [ROLE.STUDENT]: "/dashboard",
 };
 
+// ------------------ Protected Route ------------------
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { isAuthenticated, userRole, hasHydrated } = useAuthStore();
   if (!hasHydrated) return <div />;
@@ -57,17 +52,17 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const need = allowedRoles.map(normalizeRole);
 
   if (role === ROLE.SUPERADMIN) return children;
-
   if (!need.length) return children;
-
   if (need.includes(role)) return children;
 
   return <Navigate to={roleHome[role] || "/"} replace />;
 };
 
+// ------------------ Public Route ------------------
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, userRole, hasHydrated } = useAuthStore();
   if (!hasHydrated) return <div />;
+
   const location = useLocation();
   const allowWhenLoggedIn = location.state?.allowWhenLoggedIn === true;
 
@@ -77,7 +72,7 @@ const PublicRoute = ({ children }) => {
   return <Navigate to={roleHome[role] || "/dashboard"} replace />;
 };
 
-// ---------- App ----------
+// ------------------ App ------------------
 const App = () => {
   const { isAuthenticated } = useAuthStore();
 
@@ -88,12 +83,27 @@ const App = () => {
       <Routes>
         {/* Public */}
         <Route path="/" element={<LandingPage />} />
-        <Route path="/courses" element={<ProtectedRoute allowedRoles={[ROLE.STUDENT,ROLE.ADMIN, ROLE.SUPERADMIN,ROLE.INSTRUCTOR]}>
-          <CourseCatalogPage /></ProtectedRoute>} />
+        <Route
+          path="/courses"
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                ROLE.STUDENT,
+                ROLE.ADMIN,
+                ROLE.SUPERADMIN,
+                ROLE.INSTRUCTOR,
+              ]}
+            >
+              <CourseCatalogPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
         {/* Auth */}
+        {/* Uncomment when Signup, Register pages exist */}
+        {/* 
         <Route
           path="/signup"
           element={
@@ -109,7 +119,8 @@ const App = () => {
               <Register />
             </PublicRoute>
           }
-        />
+        /> 
+        */}
         <Route
           path="/login"
           element={
@@ -189,6 +200,8 @@ const App = () => {
             </ProtectedRoute>
           }
         />
+        {/* Uncomment when AddcollegePage exists */}
+        {/* 
         <Route
           path="/add_college"
           element={
@@ -196,8 +209,8 @@ const App = () => {
               <AddcollegePage />
             </ProtectedRoute>
           }
-        />
-
+        /> 
+        */}
         <Route
           path="/admin"
           element={
