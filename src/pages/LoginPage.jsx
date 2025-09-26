@@ -6,17 +6,10 @@ import { toast } from "react-hot-toast";
 import { authAPI } from "../services/api";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import { authAPI } from "../services/api"; // Ensure you have this API method to handle Google and OTP login
+import useAuthStore from "../store/useAuthStore";
+import { setAuthToken } from "../services/token";
 
 const LoginPage = () => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [step, setStep] = useState("choice");
-  const [loginAttempts, setLoginAttempts] = useState(0);
-  const [isLocked, setIsLocked] = useState(false);
-  const [lockTimer, setLockTimer] = useState(0);
-
-  const { login } = useAuthStore();
   const navigate = useNavigate();
 
   const [step, setStep] = useState("choice");
@@ -28,66 +21,88 @@ const LoginPage = () => {
     formState: { errors },
   } = useForm();
 
-  const startLockTimer = () => {
-    setIsLocked(true);
-    setLockTimer(15 * 60);
-    const interval = setInterval(() => {
-      setLockTimer((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          setIsLocked(false);
-          setLoginAttempts(0);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+  const ROLE = {
+    SUPERADMIN: "SUPERADMIN",
+    ADMIN: "ADMIN",
+    INSTRUCTOR: "INSTRUCTOR",
+    STUDENT: "STUDENT",
+  };
+  const normalizeRole = (raw) =>
+    String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "_");
+
+  const getCanonicalRole = (u) => {
+    const candidates = [
+      u?.role,
+      u?.Role,
+      u?.userRole,
+      u?.roleName,
+      Array.isArray(u?.roles) ? u.roles[0] : undefined,
+      Array.isArray(u?.roles) && typeof u.roles[0] === "object"
+        ? u.roles[0]?.name
+        : undefined,
+    ];
+    const roleRaw = normalizeRole(candidates.find(Boolean));
+    switch (roleRaw) {
+      case "SUPERADMIN":
+        return ROLE.SUPERADMIN;
+      case "ADMIN":
+        return ROLE.ADMIN;
+      case "INSTRUCTOR":
+        return ROLE.INSTRUCTOR;
+      case "STUDENT":
+        return ROLE.STUDENT;
+      default:
+        return ROLE.STUDENT;
+    }
   };
 
-  const formatLockTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-  };
-
-  // Handle Google login
   const handleGoogleLogin = () => {
     window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;
   };
 
-  // Send OTP
-const handleSendOtp = async ({ email }) => {
+// LoginPage.jsx
+const handleEmailSignup = async ({ email, password }) => {
   setIsLoading(true);
   try {
-    // Check if the request is structured correctly.
-    const response = await authAPI.loginOtpBegin({ email });
-    toast.success("OTP sent successfully!");
-    setOtpSent(true);
+    const resp = await authAPI.login({ email, password });
+
+    // robust payload extraction
+    const payload = resp?.data?.data ?? resp?.data ?? resp;
+    const user = payload?.user;
+    const token = payload?.token;
+
+    if (!user || !token) throw new Error("Malformed login response");
+
+    const canonicalRole = getCanonicalRole(user);
+
+    // 🔑 Save the token so axios interceptor can attach Authorization header
+    setAuthToken(token); // <-- THIS is the key line
+
+    // (Optional but fine to keep if you use elsewhere)
+    localStorage.setItem("auth_token", token);
+    localStorage.setItem("user_role", canonicalRole);
+    localStorage.setItem("user", JSON.stringify({ ...user, role: canonicalRole }));
+
+    // Keep your Zustand update
+    useAuthStore.getState().login({ ...user, role: canonicalRole }, token);
+
+    // Navigate by role
+    switch (canonicalRole) {
+      case ROLE.SUPERADMIN:  navigate("/superadmin",  { replace: true }); break;
+      case ROLE.ADMIN:       navigate("/admin",       { replace: true }); break;
+      case ROLE.INSTRUCTOR:  navigate("/instructor",  { replace: true }); break;
+      default:               navigate("/dashboard",   { replace: true }); break;
+    }
   } catch (e) {
-    toast.error(e?.response?.data?.message || "Failed to send OTP");
+    console.error("Login error:", e);
+    toast.error(e?.response?.data?.message || e?.message || "Login failed");
   } finally {
     setIsLoading(false);
   }
 };
-
-  // Verify OTP
-const handleVerifyOtp = async ({ email, otp }) => {
-  console.log('Verifying OTP with values:', { email, otp }); // Log the payload
-  try {
-    const response = await authAPI.loginOtpVerify(email, otp);
-    const { token, user } = response.data.data;
-
-    localStorage.setItem("auth_token", token);
-    sessionStorage.setItem("auth_token", token);
-    useAuthStore.getState().setToken(token);
-
-    navigate("/dashboard", { replace: true });
-  } catch (e) {
-    console.error('OTP verification failed:', e);
-    toast.error(e?.response?.data?.message || "Invalid OTP");
-  }
-};
-
 
 
   return (
@@ -118,7 +133,6 @@ const handleVerifyOtp = async ({ email, otp }) => {
         <div className="bg-white py-6 px-4 sm:py-8 sm:px-10 shadow-xl sm:rounded-2xl border border-gray-100">
           {step === "choice" && (
             <div className="space-y-4">
-              {/* Google button */}
               <Button
                 onClick={handleGoogleLogin}
                 className="w-full flex items-center justify-center space-x-2"
@@ -132,7 +146,6 @@ const handleVerifyOtp = async ({ email, otp }) => {
                 <span>Continue with Google</span>
               </Button>
 
-              {/* Email button */}
               <Button
                 onClick={() => setStep("email")}
                 variant="outline"
@@ -140,7 +153,7 @@ const handleVerifyOtp = async ({ email, otp }) => {
                 size="lg"
               >
                 <Mail size={20} className="text-gray-500" />
-                <span>Continue with Email</span>
+                <span>Login with Email</span>
               </Button>
             </div>
           )}
@@ -172,18 +185,19 @@ const handleVerifyOtp = async ({ email, otp }) => {
                 className="pl-10"
               />
 
-              {otpSent && (
-                <Input
-                  label="OTP"
-                  type="text"
-                  placeholder="Enter the OTP"
-                  error={errors.otp?.message}
-                  {...register("otp", {
-                    required: "OTP is required",
-                    minLength: { value: 4, message: "OTP must be at least 4 digits" },
-                  })}
-                />
-              )}
+              <Input
+                label="Password"
+                type="password"
+                placeholder="Enter your password"
+                error={errors.password?.message}
+                {...register("password", {
+                  required: "Password is required",
+                  minLength: {
+                    value: 6,
+                    message: "Password must be at least 6 characters",
+                  },
+                })}
+              />
 
               <Button
                 type="submit"
@@ -191,27 +205,7 @@ const handleVerifyOtp = async ({ email, otp }) => {
                 disabled={isLoading}
                 size="lg"
               >
-                {isLoading && <Loader2 size={20} className="mr-2 animate-spin" />}
-                {isLocked && !isLoading && <Lock size={20} className="mr-2" />}
-                {isLoading
-                  ? otpSent
-                    ? "Verifying OTP..."
-                    : "Sending OTP..."
-                  : isLocked
-                  ? `Locked (${formatLockTime(lockTimer)})`
-                  : otpSent
-                  ? "Verify OTP"
-                  : "Send OTP"}
-              </Button>
-
-              {/* Back button */}
-              <Button
-                type="button"
-                onClick={() => setStep("choice")}
-                variant="ghost"
-                className="w-full"
-              >
-                ← Back
+                {isLoading ? "Logging in..." : "Login"}
               </Button>
             </form>
           )}
