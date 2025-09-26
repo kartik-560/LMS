@@ -20,67 +20,14 @@ import {
   Check,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import {
+  superAdminAPI,
+  coursesAPI,
+  adminScopedAPI,
+  authAPI,
+  FALLBACK_THUMB,
+} from "../services/api";
 
-// --- START: Missing Dependencies ---
-// To resolve the compilation errors, all imported components and services
-// are now defined directly within this single file.
-
-// Mock Axios for API calls
-const mockAxios = {
-  create: () => mockAxios,
-  get: (url) => {
-    console.log(`Mock GET request to: ${url}`);
-    let data = [];
-    if (url.includes("/admin/overview")) {
-      data = { totals: { courses: 3, students: 25, instructors: 4 } };
-    } else if (url.includes("/admin/courses")) {
-      data = [
-        { id: 'c1', title: 'Intro to Web Development', description: 'Learn the basics of HTML, CSS, and JavaScript.', status: 'published', level: 'Beginner', studentCount: 15, totalModules: 8, totalChapters: 30, instructorNames: ['John Doe'] },
-        { id: 'c2', title: 'Advanced React Patterns', description: 'Deep dive into hooks, context, and performance.', status: 'published', level: 'Advanced', studentCount: 7, totalModules: 6, totalChapters: 25, instructorNames: ['Jane Smith'] },
-        { id: 'c3', title: 'Backend with Node.js', description: 'A draft course on building APIs.', status: 'draft', level: 'Intermediate', studentCount: 3, totalModules: 10, totalChapters: 40, instructorNames: ['Jane Smith'] },
-      ];
-    } else if (url.includes("/admin/instructors")) {
-        data = [
-            { id: 'i1', fullName: 'John Doe', email: 'john.doe@example.com', isActive: true, lastLogin: '2023-10-26T10:00:00Z', assignedCourses: ['c1'] },
-            { id: 'i2', fullName: 'Jane Smith', email: 'jane.smith@example.com', isActive: true, lastLogin: '2023-10-25T14:30:00Z', assignedCourses: ['c2', 'c3'] },
-            { id: 'i3', fullName: 'Peter Jones', email: 'peter.jones@example.com', isActive: false, lastLogin: '2023-09-01T11:00:00Z', assignedCourses: [] },
-        ];
-    } else if (url.includes("/admin/students")) {
-        data = [
-            { id: 's1', fullName: 'Alice Johnson', email: 'alice@example.com', isActive: true, lastLogin: '2023-10-27T09:00:00Z', assignedCourses: ['c1'] },
-            { id: 's2', fullName: 'Bob Williams', email: 'bob@example.com', isActive: true, lastLogin: '2023-10-26T15:20:00Z', assignedCourses: ['c1', 'c2'] },
-            { id: 's3', fullName: 'Charlie Brown', email: 'charlie@example.com', isActive: false, lastLogin: '2023-08-15T18:00:00Z', assignedCourses: ['c2'] },
-        ];
-    }
-    return Promise.resolve({ data });
-  },
-  post: (url, payload) => {
-    console.log(`Mock POST request to: ${url}`, payload);
-    return Promise.resolve({ data: { success: true, ...payload } });
-  },
-  patch: (url, payload) => {
-    console.log(`Mock PATCH request to: ${url}`, payload);
-    return Promise.resolve({ data: { success: true, ...payload } });
-  }
-};
-
-// Mock API Service
-const api = mockAxios;
-const adminAPI = {
-  overview: () => api.get("/admin/overview"),
-  courses: () => api.get("/admin/courses"),
-  students: () => api.get("/admin/students"),
-  instructors: () => api.get("/admin/instructors"),
-  setInstructorPermissions: (id, payload) =>
-    api.patch(`/admin/instructors/${id}/permissions`, payload),
-};
-const FALLBACK_THUMB = `data:image/svg+xml;utf8,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450">
-       <rect width="100%" height="100%" fill="#e5e7eb"/>
-       <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
-             font-family="Arial" font-size="28" fill="#6b7280">Course</text>
-     </svg>`
-  )}`;
 
 // Mock Zustand Store
 const useAuthStore = () => ({
@@ -90,14 +37,21 @@ const useAuthStore = () => ({
 });
 
 // Mock UI Components
-const Button = forwardRef(({ variant = 'primary', size = 'md', className = '', children, ...props }, ref) => {
-    const baseClasses = "inline-flex items-center justify-center rounded-md font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors";
+const Button = forwardRef(
+  (
+    { variant = "primary", size = "md", className = "", children, ...props },
+    ref
+  ) => {
+    const baseClasses =
+      "inline-flex items-center justify-center rounded-md font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors";
     const variantClasses = {
       primary: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500",
-      outline: "border border-gray-300 bg-transparent text-gray-700 hover:bg-gray-50",
+      outline:
+        "border border-gray-300 bg-transparent text-gray-700 hover:bg-gray-50",
       ghost: "bg-transparent text-gray-600 hover:bg-gray-100",
       danger: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500",
-      accent: "bg-purple-600 text-white hover:bg-purple-700 focus:ring-purple-500",
+      accent:
+        "bg-purple-600 text-white hover:bg-purple-700 focus:ring-purple-500",
     };
     const sizeClasses = {
       sm: "px-3 py-1.5 text-sm",
@@ -105,45 +59,73 @@ const Button = forwardRef(({ variant = 'primary', size = 'md', className = '', c
       lg: "px-6 py-3 text-lg",
     };
     const classes = `${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
-    return <button ref={ref} className={classes} {...props}>{children}</button>;
-});
+    return (
+      <button ref={ref} className={classes} {...props}>
+        {children}
+      </button>
+    );
+  }
+);
 
-const Card = ({ className = '', children }) => (
-  <div className={`bg-white shadow-sm rounded-lg border border-gray-200 ${className}`}>
+const Card = ({ className = "", children }) => (
+  <div
+    className={`bg-white shadow-sm rounded-lg border border-gray-200 ${className}`}
+  >
     {children}
   </div>
 );
-Card.Header = ({ children }) => <div className="p-4 sm:p-6 border-b border-gray-200">{children}</div>;
-Card.Title = ({ children }) => <h3 className="text-lg font-semibold text-gray-800">{children}</h3>;
-Card.Content = ({ children, className='' }) => <div className={`p-4 sm:p-6 ${className}`}>{children}</div>;
+Card.Header = ({ children }) => (
+  <div className="p-4 sm:p-6 border-b border-gray-200">{children}</div>
+);
+Card.Title = ({ children }) => (
+  <h3 className="text-lg font-semibold text-gray-800">{children}</h3>
+);
+Card.Content = ({ children, className = "" }) => (
+  <div className={`p-4 sm:p-6 ${className}`}>{children}</div>
+);
 
-const Badge = ({ variant = 'default', size = 'md', className = '', children }) => {
-    const baseClasses = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
-    const variantClasses = {
-      default: "bg-gray-100 text-gray-800",
-      success: "bg-green-100 text-green-800",
-      danger: "bg-red-100 text-red-800",
-      warning: "bg-yellow-100 text-yellow-800",
-      info: "bg-blue-100 text-blue-800",
-    };
-    const classes = `${baseClasses} ${variantClasses[variant]} ${className}`;
-    return <span className={classes}>{children}</span>;
+const Badge = ({
+  variant = "default",
+  size = "md",
+  className = "",
+  children,
+}) => {
+  const baseClasses =
+    "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
+  const variantClasses = {
+    default: "bg-gray-100 text-gray-800",
+    success: "bg-green-100 text-green-800",
+    danger: "bg-red-100 text-red-800",
+    warning: "bg-yellow-100 text-yellow-800",
+    info: "bg-blue-100 text-blue-800",
+  };
+  const classes = `${baseClasses} ${variantClasses[variant]} ${className}`;
+  return <span className={classes}>{children}</span>;
 };
 
-const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
+const Modal = ({ isOpen, onClose, title, children, size = "md" }) => {
   if (!isOpen) return null;
   const sizeClasses = {
-      sm: 'max-w-sm',
-      md: 'max-w-md',
-      lg: 'max-w-lg',
-      xl: 'max-w-xl',
+    sm: "max-w-sm",
+    md: "max-w-md",
+    lg: "max-w-lg",
+    xl: "max-w-xl",
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 transition-opacity" onClick={onClose}>
-      <div className={`bg-white rounded-lg shadow-xl m-4 w-full ${sizeClasses[size]} transform transition-all`} onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 transition-opacity"
+      onClick={onClose}
+    >
+      <div
+        className={`bg-white rounded-lg shadow-xl m-4 w-full ${sizeClasses[size]} transform transition-all`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start justify-between p-4 border-b rounded-t">
           <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center">
+          <button
+            onClick={onClose}
+            className="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center"
+          >
             <X size={20} />
             <span className="sr-only">Close modal</span>
           </button>
@@ -154,16 +136,19 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
   );
 };
 
-const Progress = ({ value = 0, variant = 'primary', size = 'md' }) => {
+const Progress = ({ value = 0, variant = "primary", size = "md" }) => {
   const variantClasses = {
     primary: "bg-blue-600",
     success: "bg-green-500",
     accent: "bg-purple-500",
   };
   return (
-      <div className="w-full bg-gray-200 rounded-full h-2">
-          <div className={`${variantClasses[variant]} h-2 rounded-full`} style={{ width: `${value}%` }}></div>
-      </div>
+    <div className="w-full bg-gray-200 rounded-full h-2">
+      <div
+        className={`${variantClasses[variant]} h-2 rounded-full`}
+        style={{ width: `${value}%` }}
+      ></div>
+    </div>
   );
 };
 
@@ -182,6 +167,7 @@ const fmtDate = (d) => {
     return "—";
   }
 };
+
 
 export default function AdminDashboardPage() {
   const { user } = useAuthStore();
@@ -202,10 +188,67 @@ export default function AdminDashboardPage() {
     courses: 0,
     students: 0,
     instructors: 0,
+    avgCourseCompletion: 0,
+    users: 0
   });
   const [instructors, setInstructors] = useState([]);
   const [students, setStudents] = useState([]);
   const [courses, setCourses] = useState([]);
+
+
+  const normRole = (r) => String(r || "").replace(/[^A-Z]/gi, "").toUpperCase();
+  async function makeAdminAdapter() {
+    const me = await authAPI.me();               // needs to return { role, collegeId, ... }
+    const role = normRole(me?.role);
+    const collegeId = me?.collegeId || null;
+
+    const normalizeTotals = (raw) => {
+      const t = raw?.overview?.totals || raw?.overview || raw?.totals || raw || {};
+      return { data: { totals: t } };
+    };
+
+    return {
+      overview: async () => {
+        if (role === "SUPERADMIN") {
+          const data = await superAdminAPI.getOverview();     // /superadmin/overview
+          // return normalizeTotals(data);
+          return data;
+        }
+        const data = await adminScopedAPI.overview(collegeId); // /admin/overview
+        return data;
+        // return normalizeTotals(data);
+      },
+
+      instructors: async () => {
+        if (role === "SUPERADMIN") {
+          const data = await superAdminAPI.getInstructors();   // array
+          return { data };
+        }
+        const data = await adminScopedAPI.instructors(collegeId); // { data: [...] } or array
+        return Array.isArray(data) ? { data } : { data: data?.data ?? [] };
+      },
+
+      students: async () => {
+        if (role === "SUPERADMIN") {
+          const data = await superAdminAPI.getStudents();      // array
+          return { data };
+        }
+        const data = await adminScopedAPI.students(collegeId); // { data: [...] }
+        return Array.isArray(data) ? { data } : { data: data?.data ?? [] };
+      },
+
+      courses: async () => {
+        if (role === "SUPERADMIN") {
+          const list = await coursesAPI.list();                // superadmin sees all
+          return { data: Array.isArray(list) ? list : list?.data ?? [] };
+        }
+        const data = await adminScopedAPI.courses(collegeId);  // { data: [...] }
+        return Array.isArray(data) ? { data } : { data: data?.data ?? [] };
+      },
+    };
+  }
+
+
 
   // Build an index of instructor -> course count/titles from the courses list
   const instructorCourseIndex = useMemo(() => {
@@ -222,6 +265,12 @@ export default function AdminDashboardPage() {
         if (c.title) map[id].titles.push(c.title);
       });
     }
+    return map;
+  }, [courses]);
+
+  const courseTitleById = useMemo(() => {
+    const map = {};
+    for (const c of courses) map[c.id] = c.title || c.id;
     return map;
   }, [courses]);
 
@@ -252,50 +301,44 @@ export default function AdminDashboardPage() {
       completionRate,
       averageGrade,
     };
-  }, [overview, instructors, students, courses]);
+  }, [overview, instructors, students, courses,]);
 
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
 
+        const api = await makeAdminAdapter();
+
         const [ov, ins, stu, cr] = await Promise.all([
-          adminAPI.overview(),
-          adminAPI.instructors(),
-          adminAPI.students(),
-          adminAPI.courses(),
+          api.overview(),
+          api.instructors(),
+          api.students(),
+          api.courses(),
         ]);
+        console.log("Overview: ", ov)
+        setOverview(ov?.data?.overview ?? { courses: 0, students: 0, instructors: 0 });
 
-        setOverview(
-          ov?.data?.totals ?? ov?.data ?? {
-            courses: 0,
-            students: 0,
-            instructors: 0,
-          }
-        );
+        const normInstructors = (ins?.data || []).map((i) => ({
+          id: i.id,
+          fullName: i.fullName || i.name || "Instructor",
+          email: i.email,
+          isActive: !!i.isActive,
+          lastLogin: i.lastLogin,
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(i.fullName || i.name || "I")}&background=random`,
+          assignedCourses: i.assignedCourses || null,
+        }));
 
-        const normInstructors =
-          (ins?.data || []).map((i) => ({
-            id: i.id,
-            fullName: i.fullName || i.name || "Instructor",
-            email: i.email,
-            isActive: !!i.isActive,
-            lastLogin: i.lastLogin,
-            avatar: uiAvatar(i.fullName || i.name),
-            assignedCourses: i.assignedCourses || null,
-          })) || [];
-
-        const normStudents =
-          (stu?.data || []).map((s) => ({
-            id: s.id,
-            fullName: s.fullName || s.name || "Student",
-            email: s.email,
-            isActive: !!s.isActive,
-            lastLogin: s.lastLogin,
-            avatar: uiAvatar(s.fullName || s.name),
-            assignedCourses: s.assignedCourses || [],
-            progress: {},
-          })) || [];
+        const normStudents = (stu?.data || []).map((s) => ({
+          id: s.id,
+          fullName: s.fullName || s.name || "Student",
+          email: s.email,
+          isActive: !!s.isActive,
+          lastLogin: s.lastLogin,
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(s.fullName || s.name || "S")}&background=random`,
+          assignedCourses: s.assignedCourses || [],
+          progress: {},
+        }));
 
         setInstructors(normInstructors);
         setStudents(normStudents);
@@ -311,10 +354,9 @@ export default function AdminDashboardPage() {
           totalChapters: c.totalChapters ?? 0,
           studentCount: c.studentCount || 0,
           instructorNames: c.instructorNames || [],
-          instructorIds:
-            c.instructorIds ||
-            (Array.isArray(c.instructors) ? c.instructors.map((x) => x.id) : []),
+          instructorIds: c.instructorIds || (Array.isArray(c.instructors) ? c.instructors.map((x) => x.id) : []),
         }));
+
         setCourses(normCourses);
       } catch (e) {
         console.error("Admin dashboard load error:", e);
@@ -324,6 +366,7 @@ export default function AdminDashboardPage() {
       }
     })();
   }, []);
+
 
   const filteredInstructors = useMemo(() => {
     const q = (searchTerm || "").toLowerCase();
@@ -427,12 +470,7 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="flex flex-wrap gap-2 sm:gap-3">
-              <Link to="/add-college">
-                <Button size="sm" className="w-full sm:w-auto">
-                  <Plus size={16} className="mr-2" />
-                  Add College
-                </Button>
-              </Link>
+
 
               <Link to="/create">
                 <Button size="sm" className="w-full sm:w-auto">
@@ -456,12 +494,17 @@ export default function AdminDashboardPage() {
           <Card className="p-3 sm:p-4 lg:p-6">
             <div className="flex items-center">
               <div className="w-8 ea-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Users size={16} className="text-blue-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
+                <Users
+                  size={16}
+                  className="text-blue-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6"
+                />
               </div>
               <div className="ml-2 sm:ml-3 lg:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Instructors</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">
+                  Instructors
+                </p>
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
-                  {stats.totalInstructors}
+                  {overview.instructors}
                 </p>
               </div>
             </div>
@@ -470,12 +513,17 @@ export default function AdminDashboardPage() {
           <Card className="p-3 sm:p-4 lg:p-6">
             <div className="flex items-center">
               <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <GraduationCap size={16} className="text-green-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
+                <GraduationCap
+                  size={16}
+                  className="text-green-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6"
+                />
               </div>
               <div className="ml-2 sm:ml-3 lg:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Students</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">
+                  Students
+                </p>
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
-                  {stats.totalStudents}
+                  {overview.students}
                 </p>
               </div>
             </div>
@@ -484,12 +532,17 @@ export default function AdminDashboardPage() {
           <Card className="p-3 sm:p-4 lg:p-6">
             <div className="flex items-center">
               <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <BookOpen size={16} className="text-purple-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
+                <BookOpen
+                  size={16}
+                  className="text-purple-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6"
+                />
               </div>
               <div className="ml-2 sm:ml-3 lg:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Courses</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">
+                  Courses
+                </p>
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
-                  {stats.totalCourses}
+                  {overview.courses}
                 </p>
               </div>
             </div>
@@ -498,12 +551,17 @@ export default function AdminDashboardPage() {
           <Card className="p-3 sm:p-4 lg:p-6">
             <div className="flex items-center">
               <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Activity size={16} className="text-yellow-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
+                <Activity
+                  size={16}
+                  className="text-yellow-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6"
+                />
               </div>
               <div className="ml-2 sm:ml-3 lg:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Active Users</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">
+                  Active Users
+                </p>
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
-                  {stats.activeUsers}
+                  {overview.users}
                 </p>
               </div>
             </div>
@@ -512,10 +570,15 @@ export default function AdminDashboardPage() {
           <Card className="p-3 sm:p-4 lg:p-6">
             <div className="flex items-center">
               <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                <Target size={16} className="text-indigo-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
+                <Target
+                  size={16}
+                  className="text-indigo-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6"
+                />
               </div>
               <div className="ml-2 sm:ml-3 lg:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Completion</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">
+                  Completion
+                </p>
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
                   {stats.completionRate}%
                 </p>
@@ -526,10 +589,15 @@ export default function AdminDashboardPage() {
           <Card className="p-3 sm:p-4 lg:p-6">
             <div className="flex items-center">
               <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                <Award size={16} className="text-red-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
+                <Award
+                  size={16}
+                  className="text-red-600 sm:w-5 sm:h-5 lg:w-6 lg:h-6"
+                />
               </div>
               <div className="ml-2 sm:ml-3 lg:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Avg Grade</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">
+                  Avg Grade
+                </p>
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
                   {stats.averageGrade}%
                 </p>
@@ -554,11 +622,10 @@ export default function AdminDashboardPage() {
                     setActiveTab(tab.id);
                     setSelectedUsers([]);
                   }}
-                  className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? "border-primary-500 text-primary-600"
-                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                  }`}
+                  className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${activeTab === tab.id
+                    ? "border-primary-500 text-primary-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    }`}
                 >
                   <tab.icon size={16} />
                   <span className="hidden sm:inline">{tab.name}</span>
@@ -623,7 +690,9 @@ export default function AdminDashboardPage() {
                 <div className="space-y-4">
                   <div>
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600">Course Completion Rate</span>
+                      <span className="text-gray-600">
+                        Course Completion Rate
+                      </span>
                       <span className="font-medium">
                         {stats.completionRate}%
                       </span>
@@ -632,7 +701,9 @@ export default function AdminDashboardPage() {
                   </div>
                   <div>
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600">Student Satisfaction</span>
+                      <span className="text-gray-600">
+                        Student Satisfaction
+                      </span>
                       <span className="font-medium">92%</span>
                     </div>
                     <Progress value={92} size="sm" variant="success" />
@@ -726,43 +797,70 @@ export default function AdminDashboardPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            instructor.isActive 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {instructor.isActive ? 'Active' : 'Inactive'}
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${instructor.isActive
+                              ? "bg-green-100 text-green-800"
+                              : "bg-red-100 text-red-800"
+                              }`}
+                          >
+                            {instructor.isActive ? "Active" : "Inactive"}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 text-blue-700 text-sm font-medium">
-                            {instructor.assignedCourses?.length || 0}
+                            {instructor.assignedCourses?.length ??
+                              (instructorCourseIndex[instructor.id]?.count ||
+                                0)}
                           </span>
                         </td>
+
                         <td className="px-6 py-4 text-sm text-gray-500">
-                          No Course
+                          {instructorCourseIndex[instructor.id]?.titles
+                            ?.length ? (
+                            instructorCourseIndex[instructor.id].titles.join(
+                              ", "
+                            )
+                          ) : (
+                            <span className="text-gray-500">No Course</span>
+                          )}
                         </td>
+
                         <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
                           {fmtDate(instructor.lastLogin)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end space-x-2">
                             <button
-                              onClick={() => handleUserAction(instructor.id, "edit")}
+                              onClick={() =>
+                                handleUserAction(instructor.id, "edit")
+                              }
                               className="text-blue-600 hover:text-blue-900"
                               title="Edit"
                             >
                               <Edit size={16} />
                             </button>
                             <button
-                              onClick={() => handleUserAction(
-                                instructor.id,
-                                instructor.isActive ? "deactivate" : "activate"
-                              )}
-                              className={`${instructor.isActive ? 'text-green-600 hover:text-green-900' : 'text-red-600 hover:text-red-900'}`}
-                              title={instructor.isActive ? 'Deactivate' : 'Activate'}
+                              onClick={() =>
+                                handleUserAction(
+                                  instructor.id,
+                                  instructor.isActive
+                                    ? "deactivate"
+                                    : "activate"
+                                )
+                              }
+                              className={`${instructor.isActive
+                                ? "text-green-600 hover:text-green-900"
+                                : "text-red-600 hover:text-red-900"
+                                }`}
+                              title={
+                                instructor.isActive ? "Deactivate" : "Activate"
+                              }
                             >
-                              {instructor.isActive ? <Check size={16} /> : <X size={16} />}
+                              {instructor.isActive ? (
+                                <Check size={16} />
+                              ) : (
+                                <X size={16} />
+                              )}
                             </button>
                           </div>
                         </td>
@@ -818,7 +916,9 @@ export default function AdminDashboardPage() {
                       className="w-full sm:w-auto"
                     >
                       <UserCheck size={16} className="mr-1" />
-                      <span className="hidden sm:inline">Activate ({selectedUsers.length})</span>
+                      <span className="hidden sm:inline">
+                        Activate ({selectedUsers.length})
+                      </span>
                       <span className="sm:hidden">Activate</span>
                     </Button>
                     <Button
@@ -847,9 +947,9 @@ export default function AdminDashboardPage() {
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
                         Student
                       </th>
-                      <th className="px-6 py-3 pl-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                      {/* <th className="px-6 py-3 pl-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
                         Course
-                      </th>
+                      </th> */}
                       <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">
                         Enrolled
                       </th>
@@ -869,7 +969,7 @@ export default function AdminDashboardPage() {
                       const finalTests = Math.floor(Math.random() * 5);
                       const interviews = Math.floor(Math.random() * 5);
                       const certifications = Math.floor(Math.random() * 5);
-                      
+
                       return (
                         <tr key={s.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -889,13 +989,18 @@ export default function AdminDashboardPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-left">
-                            {s.assignedCourses?.length > 0 
-                              ? (['c1', 'c2'].some(course => s.assignedCourses.includes(course)) 
-                                  ? <span className="text-gray-500">No Course</span>
-                                  : <span className="text-gray-900">{s.assignedCourses.join(', ')}</span>)
-                              : <span className="text-gray-500">No Course</span>}
-                          </td>
+                          {/* <td className="px-6 py-4 text-left">
+                            {s.assignedCourses?.length ? (
+                              <span className="text-gray-900">
+                                {s.assignedCourses
+                                  .map((id) => courseTitleById[id] || id)
+                                  .join(", ")}
+                              </span>
+                            ) : (
+                              <span className="text-gray-500">No Course</span>
+                            )}
+                          </td> */}
+
                           <td className="px-6 py-4 whitespace-nowrap text-center">
                             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 text-blue-700 text-sm font-medium">
                               {s.assignedCourses?.length || 0}
@@ -1126,8 +1231,8 @@ export default function AdminDashboardPage() {
               >
                 {selectedUser.isActive ? "Deactivate User" : "Activate User"}
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setShowUserModal(false)}
                 className="w-full sm:w-auto"
               >
@@ -1205,7 +1310,7 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-              <Button 
+              <Button
                 onClick={() => toast.info("Course editor coming soon!")}
                 className="w-full sm:w-auto"
               >
@@ -1220,8 +1325,8 @@ export default function AdminDashboardPage() {
                 <BarChart3 size={16} className="mr-2" />
                 View Analytics
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setShowCourseModal(false)}
                 className="w-full sm:w-auto"
               >

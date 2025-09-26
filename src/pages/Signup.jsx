@@ -1,14 +1,14 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { BookOpen, Shield, Mail } from "lucide-react";
 import { toast } from "react-hot-toast";
-import { authAPI } from "../services/api";
+import { BookOpen, Mail, Shield } from "lucide-react";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import { authAPI } from "../services/api"; // Ensure you have this API method to handle Google and OTP login
-
-const LoginPage = () => {
+import { authAPI } from "../services/api";
+import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import useAuthStore from "../store/useAuthStore";
+const SignupPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [step, setStep] = useState("choice");
@@ -19,13 +19,11 @@ const LoginPage = () => {
   const { login } = useAuthStore();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState("choice");
-  const [isLoading, setIsLoading] = useState(false);
-
   const {
     register,
     handleSubmit,
     formState: { errors },
+    reset,
   } = useForm();
 
   const startLockTimer = () => {
@@ -50,45 +48,52 @@ const LoginPage = () => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
-  // Handle Google login
   const handleGoogleLogin = () => {
     window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;
   };
 
-  // Send OTP
-const handleSendOtp = async ({ email }) => {
-  setIsLoading(true);
-  try {
-    // Check if the request is structured correctly.
-    const response = await authAPI.loginOtpBegin({ email });
-    toast.success("OTP sent successfully!");
-    setOtpSent(true);
-  } catch (e) {
-    toast.error(e?.response?.data?.message || "Failed to send OTP");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  const handleSendOtp = async ({ email }) => {
+    setIsLoading(true);
+    try {
+      const response = await authAPI.loginOtpBegin({ email });
+      toast.success("OTP sent successfully!");
+      setOtpSent(true);
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Failed to send OTP");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // Verify OTP
-const handleVerifyOtp = async ({ email, otp }) => {
-  console.log('Verifying OTP with values:', { email, otp }); // Log the payload
-  try {
-    const response = await authAPI.loginOtpVerify(email, otp);
-    const { token, user } = response.data.data;
+  const handleVerifyOtp = async ({ email, otp }) => {
+    console.log("Verifying OTP with values:", { email, otp });
+    try {
+      const response = await authAPI.loginOtpVerify(email, otp);
+      console.log("OTP verification response:", response);
+      console.log("Received registration data:", response.registration);
+      const registration = response.registration;
 
-    localStorage.setItem("auth_token", token);
-    sessionStorage.setItem("auth_token", token);
-    useAuthStore.getState().setToken(token);
+      localStorage.setItem("reg_data", JSON.stringify(registration));
+      sessionStorage.setItem("reg_data", JSON.stringify(registration));
+      // useAuthStore.getState().setToken(token);
 
-    navigate("/dashboard", { replace: true });
-  } catch (e) {
-    console.error('OTP verification failed:', e);
-    toast.error(e?.response?.data?.message || "Invalid OTP");
-  }
-};
-
-
+      toast.success("OTP verified!");
+      navigate("/register-first", { replace: true });
+      // Example inside your login success code
+      // if (user.role === "SUPERADMIN") {
+      //   navigate("/superadmin", { replace: true });
+      // } else if (user.role === "ADMIN") {
+      //   navigate("/admin", { replace: true });
+      // } else if (user.role === "INSTRUCTOR") {
+      //   navigate("/instructor", { replace: true });
+      // } else {
+      //   navigate("/dashboard", { replace: true });
+      // }
+    } catch (e) {
+      console.error("OTP verification failed:", e);
+      toast.error(e?.response?.data?.message || "Invalid OTP");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex flex-col justify-center py-8 px-4 sm:px-6 lg:px-8">
@@ -104,11 +109,12 @@ const handleVerifyOtp = async ({ email, otp }) => {
             Welcome to PugArch LMS
           </h2>
           <p className="text-sm sm:text-base text-gray-600 mb-3">
-            Login to access your learning account
+            Sign in to access your learning dashboard
           </p>
-          <Link to="/signup">
+          <Link to="/login">
+            
             <div className="text-large text-blue-700">
-              signup to your account
+              Login to your account
             </div>
           </Link>
         </div>
@@ -145,11 +151,10 @@ const handleVerifyOtp = async ({ email, otp }) => {
             </div>
           )}
 
-          {/* OTP flow */}
           {step === "email" && (
             <form
               className="space-y-5 sm:space-y-6"
-              onSubmit={handleSubmit(handleEmailSignup)}
+              onSubmit={handleSubmit(otpSent ? handleVerifyOtp : handleSendOtp)}
             >
               <Input
                 label="Email address"
@@ -180,7 +185,10 @@ const handleVerifyOtp = async ({ email, otp }) => {
                   error={errors.otp?.message}
                   {...register("otp", {
                     required: "OTP is required",
-                    minLength: { value: 4, message: "OTP must be at least 4 digits" },
+                    minLength: {
+                      value: 4,
+                      message: "OTP must be at least 4 digits",
+                    },
                   })}
                 />
               )}
@@ -188,10 +196,12 @@ const handleVerifyOtp = async ({ email, otp }) => {
               <Button
                 type="submit"
                 className="w-full flex items-center justify-center"
-                disabled={isLoading}
+                disabled={isLoading || isLocked}
                 size="lg"
               >
-                {isLoading && <Loader2 size={20} className="mr-2 animate-spin" />}
+                {/* {isLoading && (
+                  <Loader2 size={20} className="mr-2 animate-spin" />
+                )} */}
                 {isLocked && !isLoading && <Lock size={20} className="mr-2" />}
                 {isLoading
                   ? otpSent
@@ -216,7 +226,6 @@ const handleVerifyOtp = async ({ email, otp }) => {
             </form>
           )}
 
-          {/* Security note */}
           <div className="mt-5 sm:mt-6 p-3 bg-gray-50 rounded-lg text-center">
             <div className="flex items-center justify-center space-x-2">
               <Shield size={14} className="text-gray-500" />
@@ -228,6 +237,7 @@ const handleVerifyOtp = async ({ email, otp }) => {
         </div>
       </div>
 
+      {/* Footer */}
       <div className="mt-6 sm:mt-8 text-center">
         <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-gray-500">
           <Link to="/help" className="hover:text-gray-700 transition-colors">
@@ -240,10 +250,12 @@ const handleVerifyOtp = async ({ email, otp }) => {
             Terms
           </Link>
         </div>
-        <p className="mt-2 text-xs text-gray-400">© 2025 Pugarch. All rights reserved.</p>
+        <p className="mt-2 text-xs text-gray-400">
+          © 2025 Pugarch. All rights reserved.
+        </p>
       </div>
     </div>
   );
 };
 
-export default LoginPage;
+export default SignupPage;

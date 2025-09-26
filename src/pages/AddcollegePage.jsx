@@ -6,11 +6,11 @@ import { toast } from "react-hot-toast";
 import collegeIcon from "../assets/college.png";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
+import { collegesAPI } from "../services/api";
 
 function AddCollegePage() {
   const [isLoading, setIsLoading] = useState(false);
 
-  // Set default values for the form
   const {
     register,
     handleSubmit,
@@ -43,7 +43,8 @@ function AddCollegePage() {
         instructorLimit: parseInt(data.instructorLimit, 10),
       };
 
-      await axios.post("http://localhost:8000/api/colleges", payload);
+      await collegesAPI.createCollege(payload);
+
       toast.success("College added successfully!");
       reset();
     } catch (error) {
@@ -60,10 +61,12 @@ function AddCollegePage() {
     <div className="min-h-screen bg-gray-100 flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-2xl w-full bg-white rounded-xl shadow-lg p-6 sm:p-8">
         <div className="flex items-center justify-center mb-4">
-          <img src={collegeIcon} alt="College Icon" className="h-10 w-10 mr-3" />
-          <h2 className="text-2xl font-bold text-gray-900">
-            Add College
-          </h2>
+          <img
+            src={collegeIcon}
+            alt="College Icon"
+            className="h-10 w-10 mr-3"
+          />
+          <h2 className="text-2xl font-bold text-gray-900">Add College</h2>
         </div>
         <p className="text-center text-gray-500 text-sm mb-6">
           Fill out the form below to add a new college to the system.
@@ -141,7 +144,10 @@ function AddCollegePage() {
                 {...register("studentLimit", {
                   required: "Student limit is required",
                   min: { value: 0, message: "Limit cannot be negative" },
-                  max: { value: 100, message: "Student limit cannot exceed 100" },
+                  max: {
+                    value: 100,
+                    message: "Student limit cannot exceed 100",
+                  },
                 })}
               />
               <Input
@@ -163,7 +169,10 @@ function AddCollegePage() {
                 {...register("instructorLimit", {
                   required: "Instructor limit is required",
                   min: { value: 0, message: "Limit cannot be negative" },
-                  max: { value: 5, message: "Instructor limit cannot exceed 5" },
+                  max: {
+                    value: 5,
+                    message: "Instructor limit cannot exceed 5",
+                  },
                 })}
               />
             </div>
