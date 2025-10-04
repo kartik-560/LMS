@@ -17,6 +17,7 @@ import EditCoursePage from "./pages/EditCoursePage";
 import Signup from "./pages/Signup";
 import Register from "./pages/Register";
 import AddcollegePage from "./pages/AddcollegePage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage"; // ✅ New import
 
 const ROLE = {
   SUPERADMIN: "SUPERADMIN",
@@ -79,8 +80,21 @@ const App = () => {
       <Routes>
         {/* Public */}
         <Route path="/" element={<LandingPage />} />
-        <Route path="/courses" element={<ProtectedRoute allowedRoles={[ROLE.STUDENT,ROLE.ADMIN, ROLE.SUPERADMIN,ROLE.INSTRUCTOR]}>
-          <CourseCatalogPage /></ProtectedRoute>} />
+        <Route
+          path="/courses"
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                ROLE.STUDENT,
+                ROLE.ADMIN,
+                ROLE.SUPERADMIN,
+                ROLE.INSTRUCTOR,
+              ]}
+            >
+              <CourseCatalogPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
@@ -109,6 +123,16 @@ const App = () => {
             </PublicRoute>
           }
         />
+        {/* ✅ Forgot Password Route */}
+        <Route
+          path="/forgot-password"
+          element={
+            <PublicRoute>
+              <ForgotPasswordPage />
+            </PublicRoute>
+          }
+        />
+
         <Route
           path="/register"
           element={

@@ -146,7 +146,7 @@ const SignupPage = () => {
                 size="lg"
               >
                 <Mail size={20} className="text-gray-500" />
-                <span>Continue with Email</span>
+                <span>Signup with Email</span>
               </Button>
             </div>
           )}
