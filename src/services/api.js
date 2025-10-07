@@ -286,7 +286,7 @@ export const collegesAPI = {
   createCollege: (data) => api.post(`/colleges`, data, { headers: makeHeaders() }),
   updateCollege: (id, data) => api.put(`/colleges/${id}`, data, { headers: makeHeaders() }),
   deleteCollege: (id) => api.delete(`/colleges/${id}`, { headers: makeHeaders() }),
-
+getDepartmentsForCollege: (collegeId) => api.get(`/colleges/${collegeId}/departments`),
   // 🔽 NEW: permissions
   getPermissions: (collegeId) =>
     api.get(`/colleges/${collegeId}/permissions`, { headers: makeHeaders() }),
@@ -305,7 +305,6 @@ export const collegesAPI = {
       { headers: makeHeaders() }
     ),
 };
-
 
 export const chaptersAPI = {
   listByCourse: (courseId) =>
@@ -411,6 +410,10 @@ export const progressAPI = {
   courseSummary: (courseId) =>
     api.get(`/progress/course/${courseId}/summary`).then((r) => r.data),
   dashboard: () => api.get(`/progress/dashboard`).then((r) => r.data),
+};
+
+export const departmentAPI = {
+  getDepartments: () => api.get("auth/signup/departments-catalog"),
 };
 
 export default api;

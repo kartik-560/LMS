@@ -9,52 +9,52 @@ const Register = () => {
   const [role, setRole] = useState("");
   const [userData, setUserData] = useState(null);
 
-  // Fetch user data from localStorage and update state
+
   useEffect(() => {
     const storedData = localStorage.getItem("reg_data");
 
-    // Check if the storedData is a valid JSON string
+
     if (storedData) {
       try {
         const parsedData = JSON.parse(storedData);
         console.log("Stored registration data:", parsedData);
 
         setUserData(parsedData);
-        setRole(parsedData.role); // Set role based on registration data
+        setRole(parsedData.role);
       } catch (error) {
         console.error("Error parsing JSON from localStorage:", error);
-        navigate("/otp"); // Redirect to OTP page if data is corrupted
+        navigate("/otp");
       }
     } else {
-      navigate("/otp"); // Redirect to OTP page if no registration data is available
+      navigate("/otp");
     }
   }, [navigate]);
 
-  // Form setup using react-hook-form
   const {
     register,
     handleSubmit,
     formState: { errors },
-    setValue, // To set values manually after data is fetched
-    getValues, // To access current form values
+    setValue,
+    getValues,
   } = useForm();
 
-  // Once userData is fetched, set form default values
+
   useEffect(() => {
     if (userData) {
-      // Dynamically set form data using `setValue` based on userData
+
       setValue("fullName", userData?.fullName || "");
       setValue("email", userData?.email || "");
       setValue("mobile", userData?.mobile || "");
       setValue("year", userData?.year || "");
-      setValue("branch", userData?.branch || "");
+
+      setValue("department", userData?.department?.name || "");
       setValue("rollNumber", userData?.rollNumber || "");
     }
   }, [userData, setValue]);
 
   const onSubmit = async (formData) => {
     try {
-      // Attach email from registration data (this is already available in localStorage)
+
       const registrationData = JSON.parse(localStorage.getItem("reg_data"));
 
       if (!registrationData) {
@@ -67,12 +67,12 @@ const Register = () => {
 
       console.log("Submitting registration with data:", formData);
 
-      // Send the registration data to complete the signup process
+
       const response = await authAPI.completeSignup(formData);
 
       if (response.success) {
         toast.success("Registration complete! Please log in.");
-        navigate("/login"); // Redirect to login page after successful registration
+        navigate("/login");
       } else {
         toast.error(response.message || "Registration failed");
       }
@@ -84,7 +84,6 @@ const Register = () => {
     }
   };
 
-  // If userData is not available, render a loading state or return
   if (!userData) {
     return <div>Loading...</div>;
   }
@@ -94,7 +93,7 @@ const Register = () => {
       <h2 className="text-2xl font-bold mb-6 text-center">Complete Your Registration</h2>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-        {/* Full Name */}
+
         <div>
           <label className="block text-sm font-medium mb-1">Full Name</label>
           <input
@@ -107,7 +106,6 @@ const Register = () => {
           )}
         </div>
 
-        {/* Email (readonly) */}
         <div>
           <label className="block text-sm font-medium mb-1">Email</label>
           <input
@@ -118,7 +116,6 @@ const Register = () => {
           />
         </div>
 
-        {/* Mobile */}
         <div>
           <label className="block text-sm font-medium mb-1">Mobile</label>
           <input
@@ -131,7 +128,6 @@ const Register = () => {
           )}
         </div>
 
-        {/* Password */}
         <div>
           <label className="block text-sm font-medium mb-1">Password</label>
           <input
@@ -144,7 +140,6 @@ const Register = () => {
           )}
         </div>
 
-        {/* Confirm Password */}
         <div>
           <label className="block text-sm font-medium mb-1">Confirm Password</label>
           <input
@@ -163,7 +158,6 @@ const Register = () => {
           )}
         </div>
 
-        {/* Conditional Fields for Different Roles */}
         {role === "STUDENT" && (
           <>
             <div>
@@ -172,15 +166,17 @@ const Register = () => {
                 type="text"
                 {...register("year")}
                 className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                disabled
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Branch</label>
+              <label className="block text-sm font-medium mb-1">Department</label>
               <input
                 type="text"
-                {...register("branch")}
+                {...register("department")}
                 className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                disabled
               />
             </div>
 
@@ -190,6 +186,7 @@ const Register = () => {
                 type="text"
                 {...register("rollNumber")}
                 className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                disabled
               />
             </div>
           </>
@@ -204,6 +201,15 @@ const Register = () => {
                 value={role}
                 disabled
                 className="w-full border rounded-lg px-3 py-2 bg-gray-100 text-gray-600"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Department</label>
+              <input
+                type="text"
+                {...register("department")}
+                disabled
+                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </>

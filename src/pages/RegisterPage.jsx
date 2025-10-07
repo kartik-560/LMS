@@ -5,10 +5,9 @@ import { BookOpen as BookOpenIcon, User, Shield, Upload } from "lucide-react";
 import { toast } from "react-hot-toast";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import { authAPI } from "../services/api";
 import useAuthStore from "../store/useAuthStore";
 import userIcon from "../assets/user.jpg";
-
+import { authAPI, collegesAPI } from "../services/api";
 const ALL_ROLES = [
   { id: "student", title: "Student", icon: <User size={24} />, color: "bg-blue-100 text-blue-600" },
   { id: "instructor", title: "Instructor", icon: <BookOpenIcon size={24} />, color: "bg-green-100 text-green-600" },
@@ -46,15 +45,65 @@ export default function RegisterPage() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkSummary, setBulkSummary] = useState(null);
 
-  const { register, handleSubmit, formState: { errors }, reset, setValue } = useForm();
-
+  const { register, handleSubmit, formState: { errors }, reset, setValue, watch, resetField } = useForm();
+  const [departments, setDepartments] = useState([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(true);
   const roleIsStudent = selectedRole === "student";
   const roleIsAdmin = selectedRole === "admin";
   const roleIsInstructor = selectedRole === "instructor";
+  const [colleges, setColleges] = useState([]); // empty array is safe
+  const [loadingColleges, setLoadingColleges] = useState(true);
 
   const onSelectRole = (roleId) => {
     setSelectedRole(roleId);
   };
+
+  useEffect(() => {
+    async function fetchColleges() {
+      try {
+        const res = await collegesAPI.getColleges();
+
+        const collegesArray = res.data?.data?.items || [];
+        console.log("Colleges from API:", collegesArray);
+        setColleges(collegesArray);
+      } catch (err) {
+        console.error("Failed to fetch colleges", err);
+        setColleges([]);
+      }
+    }
+    fetchColleges();
+  }, []);
+
+  const selectedCollegeId = watch("collegeId");
+
+  useEffect(() => {
+
+    async function fetchDepartmentsForCollege() {
+
+      if (!selectedCollegeId) {
+        setDepartments([]);
+        return;
+      }
+
+      try {
+        setLoadingDepartments(true);
+        const res = await collegesAPI.getDepartmentsForCollege(selectedCollegeId);
+        const departmentArray = res.data?.data?.items || [];
+        setDepartments(departmentArray);
+
+        // Reset the department field in case the college changes
+        resetField("departmentId");
+
+      } catch (err) {
+        console.error("Failed to fetch departments for college", err);
+        setDepartments([]);
+      } finally {
+        setLoadingDepartments(false);
+      }
+    }
+
+    fetchDepartmentsForCollege();
+  }, [selectedCollegeId, resetField]);
 
   const onSubmit = async (data) => {
     setIsLoading(true);
@@ -66,19 +115,19 @@ export default function RegisterPage() {
       const body = {
         fullName: fullNamePayload,
         email: data.email,
-        role: selectedRole, // ✅ lowercase for schema
-        branch: roleIsStudent ? (data.branch || undefined) : undefined,
+        role: selectedRole,
+        departmentId: (roleIsStudent || roleIsInstructor) ? data.departmentId : undefined,
         year: roleIsStudent ? (data.year || undefined) : undefined,
         rollNumber: roleIsStudent ? (data.rollNumber || undefined) : undefined,
         academicYear: roleIsStudent ? (data.academicYear || undefined) : undefined,
         mobile: data.mobile || undefined,
-        collegeId: data.collegeId || undefined, // optional field
+        collegeId: data.collegeId || undefined,
         sendInvite: true,
       };
 
       const res = await authAPI.register(body);
       if (res?.data?.success === false) throw new Error(res.data.message || "Registration failed");
-
+      console.log("Registration body:", body);
       toast.success("User created. A temporary password has been emailed.");
       reset();
       navigate("/login");
@@ -93,6 +142,7 @@ export default function RegisterPage() {
     }
   };
 
+
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-2xl w-full bg-white rounded-xl shadow-lg p-6 sm:p-8">
@@ -101,7 +151,7 @@ export default function RegisterPage() {
           <h2 className="text-2xl font-bold text-gray-900">Add Users</h2>
         </div>
 
-        {/* Single User Form */}
+
         {mode === "single" && (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {/* Role Selection */}
@@ -112,9 +162,8 @@ export default function RegisterPage() {
                   <div
                     key={role.id}
                     onClick={() => onSelectRole(role.id)}
-                    className={`w-36 h-36 flex flex-col items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                      selectedRole === role.id ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"
-                    }`}
+                    className={`w-36 h-36 flex flex-col items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all ${selectedRole === role.id ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                      }`}
                   >
                     <div className={`p-2 rounded-full ${role.color} mb-2`}>{role.icon}</div>
                     <span className="text-sm font-medium text-gray-900">{role.title}</span>
@@ -123,23 +172,93 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {roleIsInstructor && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col">
+                  <label htmlFor="department" >
+                    Department
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="departmentId"
+                      {...register("departmentId", { required: "College must be selected first" })}
+                      className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-300"
+                      // Disable the dropdown if no college is selected
+                      disabled={!selectedCollegeId || loadingDepartments}
+                      defaultValue=""
+                    >
+                      <option value="">
+                        {!selectedCollegeId ? "Select a college first" : (loadingDepartments ? "Loading..." : "Select a department")}
+                      </option>
+                      {(departments || []).map((dept) => (
+                       <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Custom Arrow Icon */}
+                    {/* <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                      <svg className="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                      </svg>
+                    </div> */}
+                  </div>
+                  {errors.department && (
+                    <p className="mt-2 text-sm text-red-600">{errors.department.message}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-gray-700 font-medium mb-1">College</label>
+                  <select {...register("collegeId", { required: "College is required" })}
+                    className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-300">
+                    <option value="">Select a college</option>
+                    {(colleges || []).map((college) => (
+                      <option key={college.id} value={college.id}>
+                        {college.name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.collegeId && (
+                    <p className="text-red-500 text-sm mt-1">{errors.collegeId.message}</p>
+                  )}
+                </div>
+
+              </div>
+            )}
+
+
             {/* Basic Info */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {!roleIsAdmin ? (
-                <Input
-                  label="Full Name"
-                  type="text"
-                  {...register("fullName", { required: "Full name is required" })}
-                  error={errors.fullName?.message}
-                />
-              ) : (
-                <Input
-                  label="College Name"
-                  type="text"
-                  {...register("collegeName", { required: "College name is required" })}
-                  error={errors.collegeName?.message}
-                />
+              {/* Full Name - always visible */}
+              <Input
+                label="Full Name"
+                type="text"
+                {...register("fullName", { required: "Full name is required" })}
+                error={errors.fullName?.message}
+              />
+
+              {/* College - only for admins */}
+              {roleIsAdmin && (
+                <div className="flex flex-col">
+                  <label className="text-gray-700 font-medium mb-1">College</label>
+                  <select {...register("collegeId", { required: "College is required" })}
+                    className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-300">
+                    <option value="">Select a college</option>
+                    {(colleges || []).map((college) => (
+                      <option key={college.id} value={college.id}>
+                        {college.name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.collegeId && (
+                    <p className="text-red-500 text-sm mt-1">{errors.collegeId.message}</p>
+                  )}
+                </div>
               )}
+
+              {/* Email - always visible */}
               <Input
                 label="Email"
                 type="email"
@@ -148,18 +267,80 @@ export default function RegisterPage() {
               />
             </div>
 
-            {/* Student Specific Fields */}
+
             {roleIsStudent && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Input label="Year" type="text" {...register("year")} />
-                <Input label="Branch" type="text" {...register("branch")} />
+                <div className="flex flex-col">
+                  <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">
+                    Department
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="department"
+                      // 1. FIX: Register this field as "departmentId"
+                      {...register("departmentId", { required: "Department is required" })}
+                      className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-300"
+                      disabled={loadingDepartments}
+                      defaultValue=""
+                    >
+                      <option value="" disabled>
+                        {loadingDepartments ? "Loading..." : "Select a department"}
+                      </option>
+                      {(departments || []).map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Custom Arrow Icon */}
+                    {/* <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                      <svg className="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                      </svg>
+                    </div> */}
+                  </div>
+                  {/* 2. FIX: Check for errors on "departmentId" */}
+                  {errors.departmentId && (
+                    <p className="mt-2 text-sm text-red-600">{errors.departmentId.message}</p>
+                  )}
+                </div>
                 <Input label="Roll Number" type="text" {...register("rollNumber")} />
                 <Input label="Academic Year" type="text" {...register("academicYear")} />
+
+                <div className="flex flex-col">
+                  <label className="text-gray-700 font-medium mb-1">College</label>
+                  <select {...register("collegeId", { required: "College is required" })}
+                    className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-300">
+                    <option value="">Select a college</option>
+                    {(colleges || []).map((college) => (
+                      <option key={college.id} value={college.id}>
+                        {college.name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.collegeId && (
+                    <p className="text-red-500 text-sm mt-1">{errors.collegeId.message}</p>
+                  )}
+                </div>
               </div>
             )}
 
-            <Input label="Mobile" type="text" {...register("mobile")} />
-            <Input label="College ID" type="text" {...register("collegeId")} />
+            <Input
+              label="Mobile"
+              type="tel" // Use type="tel" for phone numbers
+              {...register("mobile", {
+                // Make it optional by not adding 'required'
+                // but add pattern validation if a value is entered.
+                pattern: {
+                  value: /^[6-9]\d{9}$/,
+                  message: "Please enter a valid 10-digit Indian mobile number",
+                },
+              })}
+              error={errors.mobile?.message}
+            />
+
 
             <Button
               type="submit"
