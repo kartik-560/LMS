@@ -75,20 +75,11 @@ const SignupPage = () => {
 
       localStorage.setItem("reg_data", JSON.stringify(registration));
       sessionStorage.setItem("reg_data", JSON.stringify(registration));
-      // useAuthStore.getState().setToken(token);
+   
 
       toast.success("OTP verified!");
       navigate("/register-first", { replace: true });
-      // Example inside your login success code
-      // if (user.role === "SUPERADMIN") {
-      //   navigate("/superadmin", { replace: true });
-      // } else if (user.role === "ADMIN") {
-      //   navigate("/admin", { replace: true });
-      // } else if (user.role === "INSTRUCTOR") {
-      //   navigate("/instructor", { replace: true });
-      // } else {
-      //   navigate("/dashboard", { replace: true });
-      // }
+     
     } catch (e) {
       console.error("OTP verification failed:", e);
       toast.error(e?.response?.data?.message || "Invalid OTP");
@@ -146,7 +137,7 @@ const SignupPage = () => {
                 size="lg"
               >
                 <Mail size={20} className="text-gray-500" />
-                <span>Continue with Email</span>
+                <span>Signup with Email</span>
               </Button>
             </div>
           )}

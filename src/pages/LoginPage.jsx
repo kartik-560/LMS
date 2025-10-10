@@ -11,7 +11,6 @@ import { setAuthToken } from "../services/token";
 
 const LoginPage = () => {
   const navigate = useNavigate();
-
   const [step, setStep] = useState("choice");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -27,6 +26,7 @@ const LoginPage = () => {
     INSTRUCTOR: "INSTRUCTOR",
     STUDENT: "STUDENT",
   };
+
   const normalizeRole = (raw) =>
     String(raw || "")
       .trim()
@@ -63,47 +63,45 @@ const LoginPage = () => {
     window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;
   };
 
-// LoginPage.jsx
-const handleEmailSignup = async ({ email, password }) => {
-  setIsLoading(true);
-  try {
-    const resp = await authAPI.login({ email, password });
+  // Handle Email Login
+  const handleEmailSignup = async ({ email, password }) => {
+    setIsLoading(true);
+    try {
+      const resp = await authAPI.login({ email, password });
 
-    // robust payload extraction
-    const payload = resp?.data?.data ?? resp?.data ?? resp;
-    const user = payload?.user;
-    const token = payload?.token;
+      const payload = resp?.data?.data ?? resp?.data ?? resp;
+      const user = payload?.user;
+      const token = payload?.token;
+      if (!user || !token) throw new Error("Malformed login response");
 
-    if (!user || !token) throw new Error("Malformed login response");
+      const canonicalRole = getCanonicalRole(user);
+      setAuthToken(token);
+      localStorage.setItem("auth_token", token);
+      localStorage.setItem("user_role", canonicalRole);
+      localStorage.setItem("user", JSON.stringify({ ...user, role: canonicalRole }));
+      useAuthStore.getState().login({ ...user, role: canonicalRole }, token);
 
-    const canonicalRole = getCanonicalRole(user);
-
-    // 🔑 Save the token so axios interceptor can attach Authorization header
-    setAuthToken(token); // <-- THIS is the key line
-
-    // (Optional but fine to keep if you use elsewhere)
-    localStorage.setItem("auth_token", token);
-    localStorage.setItem("user_role", canonicalRole);
-    localStorage.setItem("user", JSON.stringify({ ...user, role: canonicalRole }));
-
-    // Keep your Zustand update
-    useAuthStore.getState().login({ ...user, role: canonicalRole }, token);
-
-    // Navigate by role
-    switch (canonicalRole) {
-      case ROLE.SUPERADMIN:  navigate("/superadmin",  { replace: true }); break;
-      case ROLE.ADMIN:       navigate("/admin",       { replace: true }); break;
-      case ROLE.INSTRUCTOR:  navigate("/instructor",  { replace: true }); break;
-      default:               navigate("/dashboard",   { replace: true }); break;
+      switch (canonicalRole) {
+        case ROLE.SUPERADMIN:
+          navigate("/superadmin", { replace: true });
+          break;
+        case ROLE.ADMIN:
+          navigate("/admin", { replace: true });
+          break;
+        case ROLE.INSTRUCTOR:
+          navigate("/instructor", { replace: true });
+          break;
+        default:
+          navigate("/dashboard", { replace: true });
+          break;
+      }
+    } catch (e) {
+      console.error("Login error:", e);
+      toast.error(e?.response?.data?.message || e?.message || "Login failed");
+    } finally {
+      setIsLoading(false);
     }
-  } catch (e) {
-    console.error("Login error:", e);
-    toast.error(e?.response?.data?.message || e?.message || "Login failed");
-  } finally {
-    setIsLoading(false);
-  }
-};
-
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex flex-col justify-center py-8 px-4 sm:px-6 lg:px-8">
@@ -122,8 +120,8 @@ const handleEmailSignup = async ({ email, password }) => {
             Login to access your learning account
           </p>
           <Link to="/signup">
-            <div className="text-large text-blue-700">
-              signup to your account
+            <div className="text-large text-blue-700 hover:underline">
+              Sign up for an account
             </div>
           </Link>
         </div>
@@ -184,19 +182,31 @@ const handleEmailSignup = async ({ email, password }) => {
                 className="pl-10"
               />
 
-              <Input
-                label="Password"
-                type="password"
-                placeholder="Enter your password"
-                error={errors.password?.message}
-                {...register("password", {
-                  required: "Password is required",
-                  minLength: {
-                    value: 6,
-                    message: "Password must be at least 6 characters",
-                  },
-                })}
-              />
+              <div>
+                <Input
+                  label="Password"
+                  type="password"
+                  placeholder="Enter your password"
+                  error={errors.password?.message}
+                  {...register("password", {
+                    required: "Password is required",
+                    minLength: {
+                      value: 6,
+                      message: "Password must be at least 6 characters",
+                    },
+                  })}
+                />
+                {/* 🔑 Forgot Password Link */}
+                <div className="text-right mt-1">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/forgot-password")}
+                    className="text-sm text-blue-600 hover:underline focus:outline-none"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+              </div>
 
               <Button
                 type="submit"
