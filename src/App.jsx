@@ -1,22 +1,23 @@
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
-import useAuthStore from "./store/useAuthStore";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Navbar from "./components/layout/Navbar";
+import AddcollegePage from "./pages/AddcollegePage";
+import AdminDashboardPage from "./pages/AdminDashboardPage";
+import CourseCatalogPage from "./pages/CourseCatalogPage";
+import CourseViewerPage from "./pages/CourseViewerPage";
+import CreateCoursePage from "./pages/CreateCoursePage";
+import CreateFinaltest from "./pages/CreateFinaltest";
+import EditCoursePage from "./pages/EditCoursePage";
+import InstructorDashboardPage from "./pages/InstructorDashboardPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
-import CourseCatalogPage from "./pages/CourseCatalogPage";
-import StudentDashboardPage from "./pages/StudentDashboardPage";
-import InstructorDashboardPage from "./pages/InstructorDashboardPage";
-import CreateCoursePage from "./pages/CreateCoursePage";
-import AdminDashboardPage from "./pages/AdminDashboardPage";
-import SuperAdminDashboardPage from "./pages/SuperAdminDashboardPage";
-import CourseViewerPage from "./pages/CourseViewerPage";
-import RegisterPage from "./pages/RegisterPage";
-import Terms from "./pages/TermsPage";
 import Privacy from "./pages/PrivacyPage";
-import EditCoursePage from "./pages/EditCoursePage";
-import Signup from "./pages/Signup";
 import Register from "./pages/Register";
-import AddcollegePage from "./pages/AddcollegePage";
+import RegisterPage from "./pages/RegisterPage";
+import Signup from "./pages/Signup";
+import StudentDashboardPage from "./pages/StudentDashboardPage";
+import SuperAdminDashboardPage from "./pages/SuperAdminDashboardPage";
+import Terms from "./pages/TermsPage";
+import useAuthStore from "./store/useAuthStore";
 
 const ROLE = {
   SUPERADMIN: "SUPERADMIN",
@@ -180,6 +181,17 @@ const App = () => {
             </ProtectedRoute>
           }
         />
+
+        
+ <Route
+          path="/create_finaltest"
+          element={
+            <ProtectedRoute allowedRoles={[ROLE.SUPERADMIN]}>
+              <CreateFinaltest />
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/add_college"
           element={
