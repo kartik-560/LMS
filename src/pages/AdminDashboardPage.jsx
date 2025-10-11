@@ -29,14 +29,12 @@ import {
 } from "../services/api";
 
 
-// Mock Zustand Store
 const useAuthStore = () => ({
   user: { fullName: "Admin User" },
   token: "mock-jwt-token",
   logout: () => console.log("Logged out"),
 });
 
-// Mock UI Components
 const Button = forwardRef(
   (
     { variant = "primary", size = "md", className = "", children, ...props },
@@ -152,7 +150,6 @@ const Progress = ({ value = 0, variant = "primary", size = "md" }) => {
   );
 };
 
-// --- END: Missing Dependencies ---
 
 const uiAvatar = (name = "User") =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(
@@ -198,7 +195,7 @@ export default function AdminDashboardPage() {
 
   const normRole = (r) => String(r || "").replace(/[^A-Z]/gi, "").toUpperCase();
   async function makeAdminAdapter() {
-    const me = await authAPI.me();               // needs to return { role, collegeId, ... }
+    const me = await authAPI.me();
     const role = normRole(me?.role);
     const collegeId = me?.collegeId || null;
 
@@ -210,13 +207,13 @@ export default function AdminDashboardPage() {
     return {
       overview: async () => {
         if (role === "SUPERADMIN") {
-          const data = await superAdminAPI.getOverview();     // /superadmin/overview
-          // return normalizeTotals(data);
+          const data = await superAdminAPI.getOverview();
+
           return data;
         }
-        const data = await adminScopedAPI.overview(collegeId); // /admin/overview
+        const data = await adminScopedAPI.overview(collegeId);
         return data;
-        // return normalizeTotals(data);
+
       },
 
       instructors: async () => {
@@ -472,7 +469,7 @@ export default function AdminDashboardPage() {
             <div className="flex flex-wrap gap-2 sm:gap-3">
 
 
-              <Link to="/create">
+              <Link to="/courses/create">
                 <Button size="sm" className="w-full sm:w-auto">
                   <Plus size={16} className="mr-2" />
                   Create Course

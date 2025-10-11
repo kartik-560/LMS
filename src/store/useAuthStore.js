@@ -88,9 +88,8 @@ const useAuthStore = create()(
 
         const role = normalizeRole(state?.userRole);
 
-        // Defer to next microtask to be extra safe
         queueMicrotask(() => {
-          // ✅ use captured _set instead of useAuthStore.setState or bare set
+  
           _set?.({
             isAuthenticated: Boolean(token),
             userRole: role,

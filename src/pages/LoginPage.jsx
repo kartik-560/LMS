@@ -64,6 +64,45 @@ const LoginPage = () => {
   };
 
   // Handle Email Login
+  // const handleEmailSignup = async ({ email, password }) => {
+  //   setIsLoading(true);
+  //   try {
+  //     const resp = await authAPI.login({ email, password });
+
+  //     const payload = resp?.data?.data ?? resp?.data ?? resp;
+  //     const user = payload?.user;
+  //     const token = payload?.token;
+  //      console.log("Final check: User object from API payload:", user);
+  //     if (!user || !token) throw new Error("Malformed login response");
+
+  //     const canonicalRole = getCanonicalRole(user);
+  //     setAuthToken(token);
+  //     localStorage.setItem("auth_token", token);
+  //     localStorage.setItem("user_role", canonicalRole);
+  //     localStorage.setItem("user", JSON.stringify({ ...user, role: canonicalRole }));
+  //     useAuthStore.getState().login({ ...user, role: canonicalRole }, token);
+
+  //     switch (canonicalRole) {
+  //       case ROLE.SUPERADMIN:
+  //         navigate("/superadmin", { replace: true });
+  //         break;
+  //       case ROLE.ADMIN:
+  //         navigate("/admin", { replace: true });
+  //         break;
+  //       case ROLE.INSTRUCTOR:
+  //         navigate("/instructor", { replace: true });
+  //         break;
+  //       default:
+  //         navigate("/dashboard", { replace: true });
+  //         break;
+  //     }
+  //   } catch (e) {
+  //     console.error("Login error:", e);
+  //     toast.error(e?.response?.data?.message || e?.message || "Login failed");
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
   const handleEmailSignup = async ({ email, password }) => {
     setIsLoading(true);
     try {
@@ -74,12 +113,26 @@ const LoginPage = () => {
       const token = payload?.token;
       if (!user || !token) throw new Error("Malformed login response");
 
+      // --- START: CORRECTED LOGIC ---
       const canonicalRole = getCanonicalRole(user);
+
+      // Create a new, clean user object for our store
+      const userForStore = {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: canonicalRole, // Use the normalized role
+        // Pull the collegeId from the nested permissions object
+        collegeId: user.permissions?.collegeId,
+      };
+
+      // Now, save the clean object and token to the store and localStorage
       setAuthToken(token);
       localStorage.setItem("auth_token", token);
       localStorage.setItem("user_role", canonicalRole);
-      localStorage.setItem("user", JSON.stringify({ ...user, role: canonicalRole }));
-      useAuthStore.getState().login({ ...user, role: canonicalRole }, token);
+      localStorage.setItem("user", JSON.stringify(userForStore));
+      useAuthStore.getState().login(userForStore, token);
+      // --- END: CORRECTED LOGIC ---
 
       switch (canonicalRole) {
         case ROLE.SUPERADMIN:
@@ -102,6 +155,7 @@ const LoginPage = () => {
       setIsLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex flex-col justify-center py-8 px-4 sm:px-6 lg:px-8">

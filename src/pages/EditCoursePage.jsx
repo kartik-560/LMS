@@ -68,8 +68,8 @@ const mapAPIQuestionToUI = (q = {}) => {
   const coIdxs = Array.isArray(q.correctOptionIndexes)
     ? q.correctOptionIndexes
     : Array.isArray(q.correctIndexes)
-    ? q.correctIndexes
-    : null;
+      ? q.correctIndexes
+      : null;
 
   let options = optionsAsObjects;
   if (type === "single" && coIdx != null) {
@@ -232,9 +232,9 @@ export default function EditCoursePage() {
       prev.map((l) =>
         l.id === lessonId
           ? {
-              ...l,
-              questions: l.questions.length > 1 ? l.questions.filter((q) => q.id !== qid) : l.questions,
-            }
+            ...l,
+            questions: l.questions.length > 1 ? l.questions.filter((q) => q.id !== qid) : l.questions,
+          }
           : l
       )
     );
@@ -257,9 +257,9 @@ export default function EditCoursePage() {
         const questions = l.questions.map((q) =>
           q.id === qid
             ? {
-                ...q,
-                options: [...q.options, { id: crypto.randomUUID(), text: "", correct: false }],
-              }
+              ...q,
+              options: [...q.options, { id: crypto.randomUUID(), text: "", correct: false }],
+            }
             : q
         );
         return { ...l, questions };
@@ -297,8 +297,126 @@ export default function EditCoursePage() {
   };
 
   /* ------------------------------ load existing ------------------------------ */
+  // useEffect(() => {
+  //   (async () => {
+  //     try {
+  //       setInitialLoading(true);
+  //       if (token) api.defaults.headers.common.Authorization = `Bearer ${token}`;
+
+  //       const courseRes = await coursesAPI.get(courseId);
+  //       const c = unwrap(courseRes);
+  //       if (!c?.id) throw new Error("Course not found");
+
+  //       // basic form fields
+  //       reset({
+  //         title: c?.title || "",
+  //         category: c?.category || "",
+  //         description: c?.description || "",
+  //       });
+
+  //       // thumbnail preview like Create
+  //       setCourseImage(c?.thumbnail || null);
+
+  //       // chapters
+  //       let chapters = Array.isArray(c?.chapters) ? c.chapters : [];
+  //       if (!chapters.length) {
+  //         const listRes = await chaptersAPI.listByCourse(courseId);
+  //         const maybe = unwrap(listRes);
+  //         chapters = Array.isArray(maybe) ? maybe : Array.isArray(maybe?.items) ? maybe.items : [];
+  //       }
+
+  //       chapters.sort((a, b) => (a?.order || 0) - (b?.order || 0));
+
+  //       // build lessons in the SAME SHAPE as Create
+  //       const built = [];
+  //       for (const ch of chapters) {
+  //         // find chapter assessment (if any)
+  //         let assessment = null;
+  //         try {
+  //           const aRes = await assessmentsAPI.listByChapter(ch.id);
+  //           const aMaybe = unwrap(aRes);
+  //           const aList = Array.isArray(aMaybe)
+  //             ? aMaybe
+  //             : Array.isArray(aMaybe?.items)
+  //               ? aMaybe.items
+  //               : Array.isArray(aMaybe?.results)
+  //                 ? aMaybe.results
+  //                 : [];
+  //           assessment =
+  //             aList.find((x) => String(x?.scope || "").toLowerCase() === "chapter") || aList[0] || null;
+
+  //           if (assessment && !Array.isArray(assessment.questions)) {
+  //             const aOne = await assessmentsAPI.get(assessment.id);
+  //             const aFull = unwrap(aOne);
+  //             if (aFull?.id) assessment = aFull;
+  //           }
+  //         } catch (err) {
+  //           console.error(`Failed to fetch assessment for chapter ${ch.id}:`, err);
+  //         }
+  //         if (assessment) {
+  //           const durationMin = assessment?.timeLimitSeconds
+  //             ? Math.round(Number(assessment.timeLimitSeconds) / 60)
+  //             : "";
+  //           const uiQuestions = Array.isArray(assessment?.questions)
+  //             ? assessment.questions.map(mapAPIQuestionToUI)
+  //             : [emptyQuizQuestion()];
+
+  //           built.push({
+  //             id: crypto.randomUUID(),
+  //             type: "test",
+  //             title: "", // not used for test in Create UX
+  //             content: "",
+  //             pdfFile: null,
+  //             quizTitle: assessment?.title || ch?.title || "",
+  //             quizDurationMinutes: durationMin,
+  //             questions: uiQuestions,
+  //             _chapterId: ch.id,
+  //             _assessmentId: assessment?.id || null,
+  //           });
+  //         } else {
+  //           built.push({
+  //             id: crypto.randomUUID(),
+  //             type: "text",
+  //             title: ch?.title || "",
+  //             content: ch?.content || "",
+  //             pdfFile: null,
+  //             quizTitle: "",
+  //             quizDurationMinutes: "",
+  //             questions: [emptyQuizQuestion()],
+  //             _chapterId: ch.id,
+  //             _assessmentId: null,
+  //           });
+  //         }
+  //       }
+
+  //       setLessons(built.length ? built : [
+  //         {
+  //           id: crypto.randomUUID(),
+  //           type: "text",
+  //           title: "",
+  //           content: "",
+  //           pdfFile: null,
+  //           quizTitle: "",
+  //           quizDurationMinutes: "",
+  //           questions: [emptyQuizQuestion()],
+  //           _chapterId: null,
+  //           _assessmentId: null,
+  //         },
+  //       ]);
+  //     } catch (err) {
+  //       console.error(err);
+  //       toast.error(err?.response?.data?.message || "Failed to load course.");
+  //       navigate(-1);
+  //     } finally {
+  //       setInitialLoading(false);
+  //     }
+  //   })();
+  // }, [courseId, token, navigate, reset]);
+
   useEffect(() => {
-    (async () => {
+    const loadCourseData = async () => {
+
+
       try {
         setInitialLoading(true);
         if (token) api.defaults.headers.common.Authorization = `Bearer ${token}`;
@@ -307,101 +425,71 @@ export default function EditCoursePage() {
         const c = unwrap(courseRes);
         if (!c?.id) throw new Error("Course not found");
 
-        // basic form fields
         reset({
           title: c?.title || "",
           category: c?.category || "",
           description: c?.description || "",
         });
-
-        // thumbnail preview like Create
         setCourseImage(c?.thumbnail || null);
 
-        // chapters
-        let chapters = Array.isArray(c?.chapters) ? c.chapters : [];
-        if (!chapters.length) {
-          const listRes = await chaptersAPI.listByCourse(courseId);
-          const maybe = unwrap(listRes);
-          chapters = Array.isArray(maybe) ? maybe : Array.isArray(maybe?.items) ? maybe.items : [];
-        }
 
+        const chaptersRes = await chaptersAPI.listByCourse(courseId);
+        let chapters = unwrap(chaptersRes) || [];
         chapters.sort((a, b) => (a?.order || 0) - (b?.order || 0));
 
-        // build lessons in the SAME SHAPE as Create
-        const built = [];
-        for (const ch of chapters) {
-          // find chapter assessment (if any)
-          let assessment = null;
-          try {
-            const aRes = await assessmentsAPI.listByChapter(ch.id);
-            const aMaybe = unwrap(aRes);
-            const aList = Array.isArray(aMaybe)
-              ? aMaybe
-              : Array.isArray(aMaybe?.items)
-              ? aMaybe.items
-              : Array.isArray(aMaybe?.results)
-              ? aMaybe.results
-              : [];
-            assessment =
-              aList.find((x) => String(x?.scope || "").toLowerCase() === "chapter") || aList[0] || null;
+        console.log("Fetched chapters:", chapters);
 
-            if (assessment && !Array.isArray(assessment.questions)) {
-              const aOne = await assessmentsAPI.get(assessment.id);
-              const aFull = unwrap(aOne);
-              if (aFull?.id) assessment = aFull;
-            }
-          } catch {}
+        const assessmentPromises = chapters.map(ch =>
+          assessmentsAPI.listByChapter(ch.id)
+            .then(res => unwrap(res))
+            .then(assessments => ({ chapterId: ch.id, assessments: assessments || [] }))
+            .catch(err => {
+              console.error(`Could not load assessments for chapter ${ch.id}`, err);
+              return { chapterId: ch.id, assessments: [] };
+            })
+        );
+
+        const chapterAssessments = await Promise.all(assessmentPromises);
+
+        // Create a lookup map for easy access
+        const assessmentMap = new Map(
+          chapterAssessments.map(item => [item.chapterId, item.assessments[0]]) // Assuming one assessment per chapter
+        );
+
+        // 3. Build the lessons state using the fetched data
+        const builtLessons = chapters.map(ch => {
+          const assessment = assessmentMap.get(ch.id);
 
           if (assessment) {
-            const durationMin = assessment?.timeLimitSeconds
-              ? Math.round(Number(assessment.timeLimitSeconds) / 60)
-              : "";
-            const uiQuestions = Array.isArray(assessment?.questions)
-              ? assessment.questions.map(mapAPIQuestionToUI)
-              : [emptyQuizQuestion()];
+            const durationMin = assessment.timeLimitSeconds ? Math.round(Number(assessment.timeLimitSeconds) / 60) : "";
+            const uiQuestions = (assessment.questions || []).map(mapAPIQuestionToUI);
 
-            built.push({
+            return {
               id: crypto.randomUUID(),
               type: "test",
-              title: "", // not used for test in Create UX
-              content: "",
-              pdfFile: null,
               quizTitle: assessment?.title || ch?.title || "",
               quizDurationMinutes: durationMin,
-              questions: uiQuestions,
+              questions: uiQuestions.length ? uiQuestions : [emptyQuizQuestion()],
               _chapterId: ch.id,
-              _assessmentId: assessment?.id || null,
-            });
+              _assessmentId: assessment.id,
+              // unused fields
+              title: "", content: "", pdfFile: null,
+            };
           } else {
-            built.push({
+            return {
               id: crypto.randomUUID(),
               type: "text",
               title: ch?.title || "",
               content: ch?.content || "",
-              pdfFile: null,
-              quizTitle: "",
-              quizDurationMinutes: "",
-              questions: [emptyQuizQuestion()],
               _chapterId: ch.id,
-              _assessmentId: null,
-            });
+              // unused fields
+              pdfFile: null, quizTitle: "", quizDurationMinutes: "", questions: [emptyQuizQuestion()], _assessmentId: null,
+            };
           }
-        }
+        });
 
-        setLessons(built.length ? built : [
-          {
-            id: crypto.randomUUID(),
-            type: "text",
-            title: "",
-            content: "",
-            pdfFile: null,
-            quizTitle: "",
-            quizDurationMinutes: "",
-            questions: [emptyQuizQuestion()],
-            _chapterId: null,
-            _assessmentId: null,
-          },
-        ]);
+        setLessons(builtLessons.length ? builtLessons : [/* default empty lesson */]);
+
       } catch (err) {
         console.error(err);
         toast.error(err?.response?.data?.message || "Failed to load course.");
@@ -409,7 +497,9 @@ export default function EditCoursePage() {
       } finally {
         setInitialLoading(false);
       }
-    })();
+    };
+
+    loadCourseData();
   }, [courseId, token, navigate, reset]);
 
   /* ------------------------------ validation & submit ------------------------------ */
@@ -521,7 +611,7 @@ export default function EditCoursePage() {
             if (l._assessmentId) {
               try {
                 await assessmentsAPI.remove(l._assessmentId);
-              } catch {}
+              } catch { }
             }
           } else {
             const chRes = await chaptersAPI.create(courseId, chapterPayload);
@@ -1071,9 +1161,8 @@ export default function EditCoursePage() {
                         </h3>
                         <p className="text-sm text-gray-500">
                           {l.type === "test"
-                            ? `Quiz • ${(l.questions || []).length} questions${
-                                l.quizDurationMinutes ? ` • ${l.quizDurationMinutes} min` : ""
-                              }`
+                            ? `Quiz • ${(l.questions || []).length} questions${l.quizDurationMinutes ? ` • ${l.quizDurationMinutes} min` : ""
+                            }`
                             : "Text lesson"}
                         </p>
                       </div>

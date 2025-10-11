@@ -394,50 +394,84 @@ export default function SuperAdminDashboardPage() {
     }
   };
 
-  const collegesDerived = useMemo(() => {
-    return (allAdmins || []).map((a) => {
+  // const collegesDerived = useMemo(() => {
+  //   return (allAdmins || []).map((a) => {
+  //     const managedCourseIds = (allCourses || [])
+  //       .filter((c) => c.creatorId === a.id || c.managerId === a.id)
+  //       .map((c) => c.id);
+
+  //     const collegeInstructors = (allInstructors || []).filter(
+  //       (instructor) =>
+  //         instructor.assignedCourses &&
+  //         instructor.assignedCourses.some((courseId) =>
+  //           managedCourseIds.includes(courseId)
+  //         )
+  //     );
+
+  //     const collegeStudents = (allStudents || []).filter(
+  //       (student) =>
+  //         student.assignedCourses &&
+  //         student.assignedCourses.some((courseId) =>
+  //           managedCourseIds.includes(courseId)
+  //         )
+  //     );
+
+  //     const assignedCourses = (allCourses || []).filter(
+  //       (c) => c.creatorId === a.id || c.managerId === a.id
+  //     );
+
+  //     return {
+  //       id: a.id,
+  //       name: a.name,
+  //       email: a.email,
+  //       avatar: a.avatar,
+  //       managedCourseIds,
+  //       instructorCount: collegeInstructors.length,
+  //       studentCount: collegeStudents.length,
+  //       enrolledStudents: collegeStudents.length,
+  //       assignedCourses: assignedCourses.map((c) => c.title),
+  //       certificatesGenerated: Math.floor(Math.random() * 50) + 10,
+  //     };
+  //   });
+  // }, [allAdmins, allCourses, allInstructors, allStudents]);
+
+  const collegesWithCounts = useMemo(() => {
+    if (!colleges || !allAdmins || !allCourses || !allInstructors || !allStudents) {
+      return [];
+    }
+    return colleges.map(college => {
+      // Find all admins associated with THIS college using the correct path from your data
+      const collegeAdmins = (allAdmins || []).filter(admin =>
+        admin.permissions?.collegeId === college.id
+      );
+
+      // Get all courses managed by those admins
       const managedCourseIds = (allCourses || [])
-        .filter((c) => c.creatorId === a.id || c.managerId === a.id)
-        .map((c) => c.id);
+        .filter(course => collegeAdmins.some(admin => admin.id === course.creatorId || admin.id === course.managerId))
+        .map(course => course.id);
 
-      const collegeInstructors = (allInstructors || []).filter(
-        (instructor) =>
-          instructor.assignedCourses &&
-          instructor.assignedCourses.some((courseId) =>
-            managedCourseIds.includes(courseId)
-          )
-      );
-
-      const collegeStudents = (allStudents || []).filter(
-        (student) =>
-          student.assignedCourses &&
-          student.assignedCourses.some((courseId) =>
-            managedCourseIds.includes(courseId)
-          )
-      );
-
-      const assignedCourses = (allCourses || []).filter(
-        (c) => c.creatorId === a.id || c.managerId === a.id
-      );
+      // Calculate counts based on the list of managed courses
+      const instructorCount = college.instructorCount || 0;
+      console.log("College:", college.name, "Managed Courses:", managedCourseIds, "Instructor Count:", instructorCount);
+      const studentCount = (allStudents || []).filter(student =>
+        (student.assignedCourses || []).some(courseId => managedCourseIds.includes(courseId))
+      ).length;
 
       return {
-        id: a.id,
-        name: a.name,
-        email: a.email,
-        avatar: a.avatar,
-        managedCourseIds,
-        instructorCount: collegeInstructors.length,
-        studentCount: collegeStudents.length,
-        enrolledStudents: collegeStudents.length,
-        assignedCourses: assignedCourses.map((c) => c.title),
-        certificatesGenerated: Math.floor(Math.random() * 50) + 10,
+        ...college, // Keep original college data (like the correct ID)
+        instructorCount,
+        studentCount,
+        enrolledStudents: studentCount, // Assuming enrolled is same as total students for this view
+        managedCourseIds, // Used for the "Courses" count badge
+        // Use original certificate count or default to 0
+        certificatesGenerated: college.certificatesGenerated || 0,
       };
     });
-  }, [allAdmins, allCourses, allInstructors, allStudents]);
+  }, [colleges, allAdmins, allCourses, allInstructors, allStudents]);
 
   const filteredColleges = useMemo(() => {
     const q = (collegesSearch || "").toLowerCase();
-    const list = colleges || [];
+    const list = colleges || []; // 👈 Use the new enriched list
     if (!q) return list;
     return list.filter(
       (c) =>
@@ -512,7 +546,7 @@ export default function SuperAdminDashboardPage() {
             courses,
             instructors: normInstructors,
             students: normStudents,
-            admins: normAdmins, // ✅ now populated
+            admins: normAdmins,
           },
           counts,
         });
@@ -572,13 +606,13 @@ export default function SuperAdminDashboardPage() {
 
   const getFilterOptions = useCallback(() => {
     if (studentFilter === "college") {
-      return (collegesDerived || []).map((c) => c.name).filter(Boolean);
+      return (collegesWithCounts || []).map((c) => c.name).filter(Boolean);
     }
     if (studentFilter === "course") {
       return (allCourses || []).map((c) => c.title).filter(Boolean);
     }
     return [];
-  }, [studentFilter, collegesDerived, allCourses]);
+  }, [studentFilter, collegesWithCounts, allCourses]);
 
   const getFilteredStudents = useCallback(() => {
     let filtered = allStudents || [];
@@ -602,7 +636,7 @@ export default function SuperAdminDashboardPage() {
         );
 
         if (studentFilter === "college") {
-          const college = (collegesDerived || []).find(
+          const college = (collegesWithCounts || []).find(
             (c) => c.name === selectedFilterValue
           );
           if (!college) return false;
@@ -626,7 +660,7 @@ export default function SuperAdminDashboardPage() {
     studentFilter,
     selectedFilterValue,
     allCourses,
-    collegesDerived,
+    collegesWithCounts,
   ]);
 
   const toggleCourseActive = async (course) => {
@@ -936,9 +970,13 @@ export default function SuperAdminDashboardPage() {
                     const collegeCourses = lists?.courses ?? [];
                     const collegeInstructors = lists?.instructors ?? [];
                     const collegeStudents = lists?.students ?? [];
+
+                    // 👇 THE FIX IS HERE: This object now matches the display cards.
                     const stats = {
-                      studentCount: counts?.studentsAssigned ?? 0,
-                      enrolledStudents: counts?.studentsEnrolled ?? 0,
+                      instructors: counts?.instructors ?? 0,
+                      courses: counts?.courses ?? 0,
+                      studentsAssigned: counts?.studentsAssigned ?? 0,
+                      studentsEnrolled: counts?.studentsEnrolled ?? 0,
                       certificatesGenerated: counts?.certificatesGenerated ?? 0,
                     };
 
@@ -992,13 +1030,10 @@ export default function SuperAdminDashboardPage() {
                             </div>
                             <div className="flex justify-end w-full">
                               <button
-                                onClick={() =>
-                                  setCollegeDetailTab("permissions")
-                                }
-                                className={`px-5 py-2 rounded-lg text-sm font-medium border transition shadow-sm
-      ${collegeDetailTab === "permissions"
-                                    ? "border-primary-500 bg-primary-50 text-primary-600"
-                                    : "border-gray-300 bg-white text-gray-600 hover:text-gray-800 hover:border-gray-400"
+                                onClick={() => setCollegeDetailTab("permissions")}
+                                className={`px-5 py-2 rounded-lg text-sm font-medium border transition shadow-sm ${collegeDetailTab === "permissions"
+                                  ? "border-primary-500 bg-primary-50 text-primary-600"
+                                  : "border-gray-300 bg-white text-gray-600 hover:text-gray-800 hover:border-gray-400"
                                   }`}
                               >
                                 Permissions
@@ -1006,33 +1041,32 @@ export default function SuperAdminDashboardPage() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Correct 5-Column Stats Grid */}
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                            <div className="text-center p-4 bg-red-50 rounded-lg">
+                              <div className="text-2xl font-bold text-red-600">{stats.instructors}</div>
+                              <div className="text-sm text-red-800">Instructors</div>
+                            </div>
                             <div className="text-center p-4 bg-blue-50 rounded-lg">
-                              <div className="text-2xl font-bold text-blue-600">
-                                {stats.studentCount}
-                              </div>
-                              <div className="text-sm text-blue-800">
-                                Students Assigned
-                              </div>
+                              <div className="text-2xl font-bold text-blue-600">{stats.studentsAssigned}</div>
+                              <div className="text-sm text-blue-800">Students</div>
                             </div>
                             <div className="text-center p-4 bg-green-50 rounded-lg">
-                              <div className="text-2xl font-bold text-green-600">
-                                {stats.enrolledStudents}
-                              </div>
-                              <div className="text-sm text-green-800">
-                                Courses Enrolled
-                              </div>
+                              <div className="text-2xl font-bold text-green-600">{stats.studentsEnrolled}</div>
+                              <div className="text-sm text-green-800">Enrolled</div>
+                            </div>
+                            <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                              <div className="text-2xl font-bold text-yellow-600">{stats.courses}</div>
+                              <div className="text-sm text-yellow-800">Courses</div>
                             </div>
                             <div className="text-center p-4 bg-purple-50 rounded-lg">
-                              <div className="text-2xl font-bold text-purple-600">
-                                {stats.certificatesGenerated}
-                              </div>
-                              <div className="text-sm text-purple-800">
-                                Certificates Generated
-                              </div>
+                              <div className="text-2xl font-bold text-purple-600">{stats.certificatesGenerated}</div>
+                              <div className="text-sm text-purple-800">Certificates</div>
                             </div>
                           </div>
                         </Card>
+
+
 
                         {/* College Sub-tabs */}
                         <Card className="p-4">
@@ -1671,7 +1705,7 @@ export default function SuperAdminDashboardPage() {
                                                     type="checkbox"
                                                     className="h-4 w-4"
                                                     checked={checked}
-                                                    disabled={permLoading}            
+                                                    disabled={permLoading}
                                                     onChange={(e) =>
                                                       saveAdminToggle(admin.id, { [key]: e.target.checked })
                                                     }
@@ -1742,7 +1776,8 @@ export default function SuperAdminDashboardPage() {
                           const studentCount = num(college.studentCount);
                           const enrolled = num(college.enrolledStudents);
                           const certs = num(college.certificatesGenerated);
-
+                          const courseCount = num(college.courseCount);
+                          console.log("Rendering college:", college.name, { managed, assigned, instructorCount, studentCount, enrolled, certs });
                           return (
                             <tr
                               key={college.id}
@@ -1804,7 +1839,7 @@ export default function SuperAdminDashboardPage() {
                               <td className="py-4 px-4">
                                 <div className="text-center">
                                   <Badge variant="info" size="sm">
-                                    {managed.length}
+                                   {courseCount}
                                   </Badge>
                                 </div>
                               </td>

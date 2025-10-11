@@ -64,6 +64,9 @@ const Register = () => {
       }
 
       formData.email = registrationData.email;
+      formData.collegeId = registrationData.collegeId;
+      formData.departmentId = registrationData.department?.id || null;
+
 
       console.log("Submitting registration with data:", formData);
 

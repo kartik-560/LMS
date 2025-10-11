@@ -32,6 +32,7 @@ export default function CreateCoursePage() {
   const navigate = useNavigate();
 
   const token = useAuthStore((s) => s.token);
+
   const user = useAuthStore((s) => s.user);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -123,12 +124,12 @@ export default function CreateCoursePage() {
       prev.map((l) =>
         l.id === lessonId
           ? {
-              ...l,
-              questions:
-                l.questions.length > 1
-                  ? l.questions.filter((q) => q.id !== qid)
-                  : l.questions,
-            }
+            ...l,
+            questions:
+              l.questions.length > 1
+                ? l.questions.filter((q) => q.id !== qid)
+                : l.questions,
+          }
           : l
       )
     );
@@ -152,12 +153,12 @@ export default function CreateCoursePage() {
         const questions = l.questions.map((q) =>
           q.id === qid
             ? {
-                ...q,
-                options: [
-                  ...q.options,
-                  { id: crypto.randomUUID(), text: "", correct: false },
-                ],
-              }
+              ...q,
+              options: [
+                ...q.options,
+                { id: crypto.randomUUID(), text: "", correct: false },
+              ],
+            }
             : q
         );
         return { ...l, questions };
@@ -330,7 +331,12 @@ export default function CreateCoursePage() {
 
   const onSubmit = async (data) => {
     if (!validateBeforeSubmit()) return;
+    const creatorId = user?.id;
 
+    if (!creatorId) {
+      toast.error("Login session expired. Please log in again.");
+      return;
+    }
     setIsLoading(true);
     try {
       // interceptor already injects token
@@ -340,14 +346,16 @@ export default function CreateCoursePage() {
         thumbnailUrl = up?.url || null;
       }
 
-      // Create Course (removed managerId; status/category/description/title only)
       const coursePayload = {
+        creatorId: creatorId,
         title: data.title,
         thumbnail: thumbnailUrl,
         status: "published",
         category: data.category,
         description: data.description,
       };
+
+      console.log("Sending course creation payload:", coursePayload);
       const course = await coursesAPI.create(coursePayload);
       const courseId = course?.id ?? course?.data?.id ?? null;
       if (!courseId) throw new Error("Failed to create course");
@@ -909,9 +917,9 @@ export default function CreateCoursePage() {
                                               (q.pairs || []).map((x) =>
                                                 x.id === p.id
                                                   ? {
-                                                      ...x,
-                                                      right: e.target.value,
-                                                    }
+                                                    ...x,
+                                                    right: e.target.value,
+                                                  }
                                                   : x
                                               )
                                             )
@@ -1053,11 +1061,10 @@ export default function CreateCoursePage() {
                         </h3>
                         <p className="text-sm text-gray-500">
                           {l.type === "test"
-                            ? `Quiz • ${(l.questions || []).length} questions${
-                                l.quizDurationMinutes
-                                  ? ` • ${l.quizDurationMinutes} min`
-                                  : ""
-                              }`
+                            ? `Quiz • ${(l.questions || []).length} questions${l.quizDurationMinutes
+                              ? ` • ${l.quizDurationMinutes} min`
+                              : ""
+                            }`
                             : "Text lesson"}
                         </p>
                       </div>

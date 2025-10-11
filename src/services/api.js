@@ -393,7 +393,7 @@ export const enrollmentsAPI = {
 
 export const assessmentsAPI = {
   listByChapter: (chapterId) =>
-    api.get(`/chapters/${chapterId}/assessments`).then((r) => r.data), // ✅ fixed URL
+    api.get(`/chapters/${chapterId}/assessments`).then((r) => r.data), 
   get: (id) => api.get(`/assessments/${id}`).then((r) => r.data),
   createForChapter: (chapterId, payload) =>
     api.post(`/chapters/${chapterId}/assessments`, payload).then((r) => r.data),
