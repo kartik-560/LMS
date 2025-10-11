@@ -19,11 +19,16 @@ import RegisterPage from "./pages/RegisterPage";
 import StudentDashboardPage from "./pages/StudentDashboardPage";
 import SuperAdminDashboardPage from "./pages/SuperAdminDashboardPage";
 import Terms from "./pages/TermsPage";
+
 import Privacy from "./pages/PrivacyPage";
 
 import Signup from "./pages/Signup";
 
 import AddcollegePage from "./pages/AddcollegePage";
+
+import useAuthStore from "./store/useAuthStore";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+
 
 const ROLE = {
   SUPERADMIN: "SUPERADMIN",
