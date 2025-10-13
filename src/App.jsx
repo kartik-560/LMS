@@ -2,7 +2,6 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Navbar from "./components/layout/Navbar";
 import  useAuthStore  from "./store/useAuthStore";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import CourseCatalogPage from "./pages/CourseCatalogPage";
 import CourseViewerPage from "./pages/CourseViewerPage";
@@ -12,26 +11,14 @@ import EditCoursePage from "./pages/EditCoursePage";
 import InstructorDashboardPage from "./pages/InstructorDashboardPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
-
 import Register from "./pages/Register";
 import RegisterPage from "./pages/RegisterPage";
-
 import StudentDashboardPage from "./pages/StudentDashboardPage";
 import SuperAdminDashboardPage from "./pages/SuperAdminDashboardPage";
 import Terms from "./pages/TermsPage";
-
-
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-
-
 import Privacy from "./pages/PrivacyPage";
-
 import Signup from "./pages/Signup";
-
 import AddcollegePage from "./pages/AddcollegePage";
-
-import useAuthStore from "./store/useAuthStore";
-
 
 
 const ROLE = {
