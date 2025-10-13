@@ -435,13 +435,8 @@ export default function RegisterPage() {
 
   const collegeIdToFetch = selectedCollegeId || (isAdminUser && !isSuperAdmin ? currentUser?.collegeId : null);
 
-
-
-
-  useEffect(() => {
+ useEffect(() => {
     async function fetchDepartmentsForCollege() {
-
-
       if (!collegeIdToFetch) {
         setDepartments([]);
         return;

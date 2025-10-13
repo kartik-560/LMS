@@ -88,33 +88,33 @@ const InstructorDashboardPage = () => {
     "https://api.dicebear.com/7.x/initials/svg?seed=" + encodeURIComponent(pickName(v));
 
 
-const fetchInstructorRequests = async (courses = []) => {
-  // Try instructor-wide endpoint first
-  try {
-    const arr = await enrollmentsAPI.listInstructorRequests();
-    if (Array.isArray(arr) && arr.length > 0) return arr;
-  } catch {
-    // ignore and fall back
-  }
+  const fetchInstructorRequests = async (courses = []) => {
+    // Try instructor-wide endpoint first
+    try {
+      const arr = await enrollmentsAPI.listInstructorRequests();
+      if (Array.isArray(arr) && arr.length > 0) return arr;
+    } catch {
+      // ignore and fall back
+    }
 
-  // Fallback: aggregate requests per course and annotate with course title
-  const perCourse = await Promise.all(
-    (courses || []).map(async (c) => {
-      try {
-        const items = await enrollmentsAPI.listEnrollmentRequestsForCourse(c.id);
-        return (items || []).map((r) => ({
-          ...r,
-          courseId: r.courseId ?? c.id,
-          courseTitle: r.courseTitle ?? c.title,
-        }));
-      } catch {
-        return [];
-      }
-    })
-  );
+    // Fallback: aggregate requests per course and annotate with course title
+    const perCourse = await Promise.all(
+      (courses || []).map(async (c) => {
+        try {
+          const items = await enrollmentsAPI.listEnrollmentRequestsForCourse(c.id);
+          return (items || []).map((r) => ({
+            ...r,
+            courseId: r.courseId ?? c.id,
+            courseTitle: r.courseTitle ?? c.title,
+          }));
+        } catch {
+          return [];
+        }
+      })
+    );
 
-  return perCourse.flat();
-};
+    return perCourse.flat();
+  };
 
   useEffect(() => {
     if (!user?.id) return;
@@ -123,142 +123,143 @@ const fetchInstructorRequests = async (courses = []) => {
 
 
 
-const fetchAll = async () => {
-  try {
-    setLoading(true);
-
-    // Courses created by this instructor
-    const rawCatalog = await coursesAPI
-      .getCourseCatalog({ creatorId: user.id, pageSize: 100 })
-      .catch(() => []);
-
-    const assigned = Array.isArray(rawCatalog?.items)
-      ? rawCatalog.items
-      : Array.isArray(rawCatalog)
-      ? rawCatalog
-      : [];
-
-    const normalized = assigned.map((c) => ({
-      ...c,
-      thumbnail: c.thumbnail || FALLBACK_THUMB,
-      status: String(c.status || "draft").toLowerCase(),
-    }));
-    setAssignedCourses(normalized);
-
-    // Chapters for each course (batch)
-    const chapterLists = await Promise.all(
-      normalized.map((course) =>
-        chaptersAPI.listByCourse(course.id).catch((e) => {
-          if (e?.response?.status !== 403) console.warn("chapters error", e);
-          return [];
-        })
-      )
-    );
-
-    const modulesData = {};
-    let totalChapters = 0;
-
-    normalized.forEach((course, idx) => {
-      const chapters = chapterLists[idx] || [];
-      modulesData[course.id] = chapters.map((ch, i) => ({
-        id: ch.id,
-        title: ch.title || `Chapter ${i + 1}`,
-        totalChapters: 1,
-        estimatedDuration: ch.estimatedDuration || "—",
-      }));
-      totalChapters += chapters.length;
-    });
-    setCourseModules(modulesData);
-
-    // Instructor-wide pending enrollment requests
- const instrReqs = await fetchInstructorRequests(normalized);
-setEnrollmentRequests(instrReqs);
-
-    // Build roster + progress (batch enrollments per course)
-    const enrollmentLists = await Promise.all(
-      normalized.map((course) =>
-        enrollmentsAPI.list({ courseId: course.id }).catch(() => [])
-      )
-    );
-
-    const studentMap = new Map();        // id -> student
-    const progressByStudent = {};        // { [studentId]: { [courseId]: percent } }
-
-    normalized.forEach((course, idx) => {
-      const enrollments = enrollmentLists[idx] || [];
-      for (const e of enrollments) {
-        const sid = e.studentId;
-        if (!sid) continue;
-
-        const existing = studentMap.get(sid) || {
-          id: sid,
-          name: e.studentName || "Student",
-          email: e.studentEmail || "",
-          avatar:
-            "https://api.dicebear.com/7.x/initials/svg?seed=" +
-            encodeURIComponent(e.studentName || "Student"),
-          assignedCourses: [],
-          lastLogin: null,
-        };
-
-        if (!existing.assignedCourses.includes(course.id)) {
-          existing.assignedCourses.push(course.id);
-        }
-        studentMap.set(sid, existing);
-
-        if (!progressByStudent[sid]) progressByStudent[sid] = {};
-        progressByStudent[sid][course.id] = Number(e.progress || 0);
+  const fetchAll = async () => {
+    try {
+      setLoading(true);
+      const params = { pageSize: 100 };
+      if (user.collegeId) {
+        params.collegeId = user.collegeId;
       }
-    });
+      if (user.departmentId) {
+        params.departmentId = user.departmentId;
+      }
 
-    const students = Array.from(studentMap.values());
-    setMyStudents(students);
-    setStudentProgress(progressByStudent);
+      const rawCatalog = await coursesAPI.getCourseCatalog(params).catch(() => []);
+      const assigned = Array.isArray(rawCatalog?.items)
+        ? rawCatalog.items
+        : Array.isArray(rawCatalog)
+          ? rawCatalog
+          : [];
 
-    // Stats
-    const totalModules = Object.values(modulesData).flat().length;
-    const activeStudents = 0; // set from lastLogin if you start tracking it
-    const perStudentAvg = students.map((stu) => {
-      const ids = stu.assignedCourses || [];
-      if (ids.length === 0) return 0;
-      const sum = ids.reduce((acc, cid) => acc + (progressByStudent[stu.id]?.[cid] ?? 0), 0);
-      return sum / ids.length;
-    });
-    const avgProgress =
-      perStudentAvg.length > 0
-        ? perStudentAvg.reduce((a, b) => a + b, 0) / perStudentAvg.length
-        : 0;
+      const normalized = assigned.map((c) => ({
+        ...c,
+        thumbnail: c.thumbnail || FALLBACK_THUMB,
+        status: String(c.status || "draft").toLowerCase(),
+      }));
+      setAssignedCourses(normalized);
 
-    setStats({
-      totalCourses: normalized.length,
-      totalStudents: students.length,
-      activeStudents,
-      averageProgress: Math.round(avgProgress),
-      totalModules,
-      totalChapters,
-      testsGraded: 0,
-      averageTestScore: 0,
-    });
-  } catch (error) {
-    console.error("Error loading instructor dashboard:", error);
-    toast.error(error?.response?.data?.error || "Failed to load dashboard data");
-  } finally {
-    setLoading(false);
-  }
-};
+      const chapterLists = await Promise.all(
+        normalized.map((course) =>
+          chaptersAPI.listByCourse(course.id).catch((e) => {
+            if (e?.response?.status !== 403) console.warn("chapters error", e);
+            return [];
+          })
+        )
+      );
+
+      const modulesData = {};
+      let totalChapters = 0;
+
+      normalized.forEach((course, idx) => {
+        const chapters = chapterLists[idx] || [];
+        modulesData[course.id] = chapters.map((ch, i) => ({
+          id: ch.id,
+          title: ch.title || `Chapter ${i + 1}`,
+          totalChapters: 1,
+          estimatedDuration: ch.estimatedDuration || "—",
+        }));
+        totalChapters += chapters.length;
+      });
+      setCourseModules(modulesData);
+
+ 
+      const instrReqs = await fetchInstructorRequests(normalized);
+      setEnrollmentRequests(instrReqs);
+
+ 
+      const enrollmentLists = await Promise.all(
+        normalized.map((course) =>
+          enrollmentsAPI.list({ courseId: course.id }).catch(() => [])
+        )
+      );
+
+      const studentMap = new Map();       
+      const progressByStudent = {};  
+
+      normalized.forEach((course, idx) => {
+        const enrollments = enrollmentLists[idx] || [];
+        for (const e of enrollments) {
+          const sid = e.studentId;
+          if (!sid) continue;
+
+          const existing = studentMap.get(sid) || {
+            id: sid,
+            name: e.studentName || "Student",
+            email: e.studentEmail || "",
+            avatar:
+              "https://api.dicebear.com/7.x/initials/svg?seed=" +
+              encodeURIComponent(e.studentName || "Student"),
+            assignedCourses: [],
+            lastLogin: null,
+          };
+
+          if (!existing.assignedCourses.includes(course.id)) {
+            existing.assignedCourses.push(course.id);
+          }
+          studentMap.set(sid, existing);
+
+          if (!progressByStudent[sid]) progressByStudent[sid] = {};
+          progressByStudent[sid][course.id] = Number(e.progress || 0);
+        }
+      });
+
+      const students = Array.from(studentMap.values());
+      setMyStudents(students);
+      setStudentProgress(progressByStudent);
+
+      // Stats
+      const totalModules = Object.values(modulesData).flat().length;
+      const activeStudents = 0; // set from lastLogin if you start tracking it
+      const perStudentAvg = students.map((stu) => {
+        const ids = stu.assignedCourses || [];
+        if (ids.length === 0) return 0;
+        const sum = ids.reduce((acc, cid) => acc + (progressByStudent[stu.id]?.[cid] ?? 0), 0);
+        return sum / ids.length;
+      });
+      const avgProgress =
+        perStudentAvg.length > 0
+          ? perStudentAvg.reduce((a, b) => a + b, 0) / perStudentAvg.length
+          : 0;
+
+      setStats({
+        totalCourses: normalized.length,
+        totalStudents: students.length,
+        activeStudents,
+        averageProgress: Math.round(avgProgress),
+        totalModules,
+        totalChapters,
+        testsGraded: 0,
+        averageTestScore: 0,
+      });
+    } catch (error) {
+      console.error("Error loading instructor dashboard:", error);
+      toast.error(error?.response?.data?.error || "Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
-const loadEnrollmentRequests = async () => {
-  try {
-    setLoadingRequests(true);
-    const reqs = await fetchInstructorRequests(assignedCourses);
-    setEnrollmentRequests(Array.isArray(reqs) ? reqs : []);
-  } finally {
-    setLoadingRequests(false);
-  }
-};
+  const loadEnrollmentRequests = async () => {
+    try {
+      setLoadingRequests(true);
+      const reqs = await fetchInstructorRequests(assignedCourses);
+      setEnrollmentRequests(Array.isArray(reqs) ? reqs : []);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
 
-  // ---------- Actions ----------
   const handleRequestAction = async (requestId, action) => {
     try {
       const next =
@@ -473,10 +474,10 @@ const loadEnrollmentRequests = async () => {
                       const avgProgress =
                         enrolledStudents.length > 0
                           ? enrolledStudents.reduce(
-                              (sum, student) =>
-                                sum + getStudentCourseProgress(student.id, course.id),
-                              0
-                            ) / enrolledStudents.length
+                            (sum, student) =>
+                              sum + getStudentCourseProgress(student.id, course.id),
+                            0
+                          ) / enrolledStudents.length
                           : 0;
 
                       return (
@@ -709,13 +710,12 @@ const loadEnrollmentRequests = async () => {
                               className="w-full h-full object-cover"
                             />
                             <div
-                              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                                studentStatus.color === "success"
+                              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${studentStatus.color === "success"
                                   ? "bg-green-500"
                                   : studentStatus.color === "warning"
-                                  ? "bg-yellow-500"
-                                  : "bg-gray-400"
-                              }`}
+                                    ? "bg-yellow-500"
+                                    : "bg-gray-400"
+                                }`}
                             ></div>
                           </div>
                           <div className="flex-1 min-w-0">
@@ -972,13 +972,12 @@ const loadEnrollmentRequests = async () => {
                         className="w-full h-full object-cover"
                       />
                       <div
-                        className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                          studentStatus.color === "success"
+                        className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${studentStatus.color === "success"
                             ? "bg-green-500"
                             : studentStatus.color === "warning"
-                            ? "bg-yellow-500"
-                            : "bg-gray-400"
-                        }`}
+                              ? "bg-yellow-500"
+                              : "bg-gray-400"
+                          }`}
                       ></div>
                     </div>
                     <div>
@@ -1103,10 +1102,10 @@ const loadEnrollmentRequests = async () => {
                 const avgProgress =
                   enrolledStudents.length > 0
                     ? enrolledStudents.reduce(
-                        (sum, student) =>
-                          sum + getStudentCourseProgress(student.id, course.id),
-                        0
-                      ) / enrolledStudents.length
+                      (sum, student) =>
+                        sum + getStudentCourseProgress(student.id, course.id),
+                      0
+                    ) / enrolledStudents.length
                     : 0;
 
                 return (

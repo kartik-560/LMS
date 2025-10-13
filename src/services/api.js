@@ -54,7 +54,9 @@ api.interceptors.response.use(
     const url = error?.config?.url || "";
     if (
       status === 401 &&
-      !["/auth/login", "/auth/registrations", "/auth/signup"].some(p => url.includes(p))
+      !["/auth/login", "/auth/registrations", "/auth/signup"].some((p) =>
+        url.includes(p)
+      )
     ) {
       setAuthToken(null);
       window.location.assign("/login");
@@ -62,7 +64,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
 
 export async function fileToBase64(file) {
   if (!file) return "";
@@ -251,17 +252,17 @@ export const coursesAPI = {
     const { data } = await api.delete(`/superadmin/courses/${id}`);
     return data;
   },
-  assign: async (
-    courseId,
-    { collegeId, departmentId = null, capacity = null }
-  ) => {
-    const { data } = await api.post(`/superadmin/courses/${courseId}/assign`, {
-      collegeId,
-      departmentId,
-      capacity,
-    });
-    return data;
-  },
+    assign: async (
+      courseId,
+      { collegeId, departmentId = null, capacity = null }
+    ) => {
+      const { data } = await api.post(`/superadmin/courses/${courseId}/assign`, {
+        collegeId,
+        departmentId,
+        capacity,
+      });
+      return data;
+    },
   unassign: async (courseId, { collegeId, departmentId = null }) => {
     const { data } = await api.delete(
       `/superadmin/courses/${courseId}/unassign`,
@@ -280,13 +281,18 @@ export const coursesAPI = {
 };
 
 export const collegesAPI = {
-  list: (params = {}) => api.get("/colleges", { params, headers: makeHeaders() }),
+  list: (params = {}) =>
+    api.get("/colleges", { params, headers: makeHeaders() }),
   getColleges: () => api.get(`/colleges`, { headers: makeHeaders() }),
   getCollege: (id) => api.get(`/colleges/${id}`, { headers: makeHeaders() }),
-  createCollege: (data) => api.post(`/colleges`, data, { headers: makeHeaders() }),
-  updateCollege: (id, data) => api.put(`/colleges/${id}`, data, { headers: makeHeaders() }),
-  deleteCollege: (id) => api.delete(`/colleges/${id}`, { headers: makeHeaders() }),
-getDepartmentsForCollege: (collegeId) => api.get(`/colleges/${collegeId}/departments`),
+  createCollege: (data) =>
+    api.post(`/colleges`, data, { headers: makeHeaders() }),
+  updateCollege: (id, data) =>
+    api.put(`/colleges/${id}`, data, { headers: makeHeaders() }),
+  deleteCollege: (id) =>
+    api.delete(`/colleges/${id}`, { headers: makeHeaders() }),
+  getDepartmentsForCollege: (collegeId) =>
+    api.get(`/colleges/${collegeId}/departments`),
   // 🔽 NEW: permissions
   getPermissions: (collegeId) =>
     api.get(`/colleges/${collegeId}/permissions`, { headers: makeHeaders() }),
@@ -299,18 +305,16 @@ getDepartmentsForCollege: (collegeId) => api.get(`/colleges/${collegeId}/departm
     ),
 
   updateAdminPermissions: (collegeId, userId, patch) =>
-    api.put(
-      `/colleges/${collegeId}/permissions/admin/${userId}`,
-      patch,
-      { headers: makeHeaders() }
-    ),
+    api.put(`/colleges/${collegeId}/permissions/admin/${userId}`, patch, {
+      headers: makeHeaders(),
+    }),
 };
 
 export const chaptersAPI = {
   listByCourse: (courseId) =>
     api.get(`/courses/${courseId}/chapters`).then((r) => r.data),
   getChapterDetails: (chapterId) =>
-     api.get(`/chapters/${chapterId}/view`).then(r => r.data),
+    api.get(`/chapters/${chapterId}/view`).then((r) => r.data),
   create: (courseId, payload) =>
     api.post(`/courses/${courseId}/chapters`, payload).then((r) => r.data),
   update: (chapterId, payload) =>
@@ -393,7 +397,7 @@ export const enrollmentsAPI = {
 
 export const assessmentsAPI = {
   listByChapter: (chapterId) =>
-    api.get(`/chapters/${chapterId}/assessments`).then((r) => r.data), 
+    api.get(`/chapters/${chapterId}/assessments`).then((r) => r.data),
   get: (id) => api.get(`/assessments/${id}`).then((r) => r.data),
   createForChapter: (chapterId, payload) =>
     api.post(`/chapters/${chapterId}/assessments`, payload).then((r) => r.data),

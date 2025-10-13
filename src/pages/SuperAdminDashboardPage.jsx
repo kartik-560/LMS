@@ -17,7 +17,7 @@ import {
   Pencil,
   Plus,
 } from "lucide-react";
-
+import { AssignCourseModal } from "./AssignCourseModal";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
@@ -48,7 +48,6 @@ export default function SuperAdminDashboardPage() {
   const isSuperAdmin = roleNorm === "SUPERADMIN";
   const isAdminOnly = roleNorm === "ADMIN";
   const isAdmin = isSuperAdmin || isAdminOnly;
-
   const [colleges, setColleges] = useState([]);
   const [allAdmins, setAllAdmins] = useState([]);
   const [allInstructors, setAllInstructors] = useState([]);
@@ -56,19 +55,14 @@ export default function SuperAdminDashboardPage() {
   const [allCourses, setAllCourses] = useState([]);
   const [systemAnalytics, setSystemAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // --- UI state (unchanged) ---
   const [selectedCollegeId, setSelectedCollegeId] = useState(null);
   const [collegesSearch, setCollegesSearch] = useState("");
-  const [courseUpdatingId, setCourseUpdatingId] = useState(null);
   const [collegeDetailTab, setCollegeDetailTab] = useState("instructors");
-
   const [selectedCollege, setSelectedCollege] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showCollegeModal, setShowCollegeModal] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [showCreateCollegeModal, setShowCreateCollegeModal] = useState(false);
-
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState("all");
   const [editingPermissions, setEditingPermissions] = useState({});
@@ -77,10 +71,8 @@ export default function SuperAdminDashboardPage() {
   const [selectedFilterValue, setSelectedFilterValue] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [studentToDelete, setStudentToDelete] = useState(null);
-
   const [loadingUsers, setLoadingUsers] = useState(true);
-  const [usersError, setUsersError] = useState("");
-
+  const [unassigningId, setUnassigningId] = useState(null);
   const [collegeDetailVM, setCollegeDetailVM] = useState(null);
   const [collegeLoading, setCollegeLoading] = useState(false);
   const [collegeError, setCollegeError] = useState("");
@@ -92,6 +84,10 @@ export default function SuperAdminDashboardPage() {
     instructorLimit: 0,
   });
   const [permAdmins, setPermAdmins] = useState([]);
+
+
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [courseToAssign, setCourseToAssign] = useState(null);
 
   const asArray = (p) => {
     if (Array.isArray(p)) return p;
@@ -106,6 +102,7 @@ export default function SuperAdminDashboardPage() {
     }
     return [];
   };
+
 
   async function fetchPermissions(collegeId) {
     setPermLoading(true);
@@ -281,14 +278,14 @@ export default function SuperAdminDashboardPage() {
     return filtered;
   };
 
-  const adminsToShow = useMemo(
-    () => getFilteredUsers(allAdmins, "admin"),
-    [allAdmins, filterRole, searchTerm]
-  );
-  const instructorsToShow = useMemo(
-    () => getFilteredUsers(allInstructors, "instructor"),
-    [allInstructors, filterRole, searchTerm]
-  );
+  // const adminsToShow = useMemo(
+  //   () => getFilteredUsers(allAdmins, "admin"),
+  //   [allAdmins, filterRole, searchTerm]
+  // );
+  // const instructorsToShow = useMemo(
+  //   () => getFilteredUsers(allInstructors, "instructor"),
+  //   [allInstructors, filterRole, searchTerm]
+  // );
 
   const extractOverview = (o) => o?.overview || o?.data?.overview || o || {};
 
@@ -452,7 +449,7 @@ export default function SuperAdminDashboardPage() {
 
       // Calculate counts based on the list of managed courses
       const instructorCount = college.instructorCount || 0;
-      console.log("College:", college.name, "Managed Courses:", managedCourseIds, "Instructor Count:", instructorCount);
+      // console.log("College:", college.name, "Managed Courses:", managedCourseIds, "Instructor Count:", instructorCount);
       const studentCount = (allStudents || []).filter(student =>
         (student.assignedCourses || []).some(courseId => managedCourseIds.includes(courseId))
       ).length;
@@ -508,7 +505,7 @@ export default function SuperAdminDashboardPage() {
           const assigned = i.assignedCourseIds || i.assignedCourses || [];
           return {
             ...i,
-            role: String(i.role || "").toUpperCase(), // normalize for filters/UI
+            role: String(i.role || "").toUpperCase(), 
             collegeName: co?.name || "",
             assignedCourseIds: assigned,
             assignedCourseNames: assigned.map((cid) => idToTitle.get(cid)).filter(Boolean),
@@ -562,10 +559,19 @@ export default function SuperAdminDashboardPage() {
   }, [selectedCollegeId]);
 
 
-  const getAdminCourses = (adminId) =>
-    allCourses.filter(
-      (c) => c.creatorId === adminId || c.managerId === adminId
-    );
+  const handleOpenAssignModal = (course) => {
+    setCourseToAssign(course);
+    setIsAssignModalOpen(true);
+  };
+
+  const handleCloseAssignModal = () => {
+    setCourseToAssign(null);
+    setIsAssignModalOpen(false);
+  };
+
+  const handleAssignSuccess = () => {
+    handleCloseAssignModal();
+  };
 
   const getCourseInstructors = useCallback(
     (courseId) =>
@@ -663,50 +669,6 @@ export default function SuperAdminDashboardPage() {
     collegesWithCounts,
   ]);
 
-  const toggleCourseActive = async (course) => {
-    const prev = course.isActive ?? true;
-    setCourseUpdatingId(course.id);
-    try {
-      setAllCourses((prevCourses) =>
-        prevCourses.map((c) =>
-          c.id === course.id ? { ...c, isActive: !prev } : c
-        )
-      );
-
-      await coursesAPI.update(course.id, { isActive: !prev });
-
-      toast.success(
-        `Course "${course.title}" is now ${!prev ? "Active" : "Inactive"}`
-      );
-    } catch (err) {
-      // rollback
-      setAllCourses((prevCourses) =>
-        prevCourses.map((c) =>
-          c.id === course.id ? { ...c, isActive: prev } : c
-        )
-      );
-      handleApiError(
-        err,
-        `Failed to update course status for "${course.title}"`
-      );
-    } finally {
-      setCourseUpdatingId(null);
-    }
-  };
-
-  const handleUserPermissions = (u) => {
-    setSelectedUser(u);
-    setEditingPermissions({
-      ...(u.permissions || {}),
-      maxInstructorsAllowed:
-        String(u.role).toLowerCase() === "admin"
-          ? Math.min(u.permissions?.maxInstructorsAllowed ?? 0, 20)
-          : u.permissions?.maxInstructorsAllowed ?? 0,
-      maxStudentsAllowed: u.permissions?.maxStudentsAllowed ?? 0,
-    });
-    setShowPermissionsModal(true);
-  };
-
   const savePermissions = async () => {
     try {
       await superAdminAPI.updateUserPermissions(
@@ -741,6 +703,31 @@ export default function SuperAdminDashboardPage() {
       setEditingPermissions({});
     } catch (err) {
       handleApiError(err, "Failed to update permissions");
+    }
+  };
+
+  const handleUnassign = async (course) => {
+
+    console.log("Inspecting course object on click:", course);
+    if (!window.confirm(`Are you sure you want to unassign "${course.title}" from this college?`)) {
+      return;
+    }
+
+    setUnassigningId(course.id);
+    try {
+      await coursesAPI.unassign(course.id, {
+        collegeId: selectedCollegeId,
+        departmentId: course.departmentId || null,
+      });
+
+      console.log("Unassigned course:", course, "departmentId:", course.departmentId || null);
+      toast.success("Course unassigned successfully.");
+
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to unassign course.");
+      console.error("Unassign failed:", err);
+    } finally {
+      setUnassigningId(null);
     }
   };
 
@@ -1452,115 +1439,63 @@ export default function SuperAdminDashboardPage() {
                             <div className="overflow-x-auto">
                               <table className="w-full text-sm">
                                 <thead>
-                                  <tr className="text-xs text-gray-500 uppercase border-b border-gray-200">
-                                    <th className="py-3 px-4 text-left">
-                                      Course
-                                    </th>
-                                    <th className="py-3 px-4 text-left">
-                                      Status
-                                    </th>
-                                    <th className="py-3 px-4 text-left">
-                                      Toggle Active
-                                    </th>
+                                  <tr className="border-b border-gray-200 text-xs uppercase text-gray-500">
+                                    <th className="py-3 px-4 text-left">Course</th>
+                                    <th className="py-3 px-4 text-left">Status</th>
+                                    {/* Renamed Header */}
+
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {collegeCourses.length === 0 ? (
                                     <tr>
-                                      <td
-                                        colSpan={3}
-                                        className="py-8 text-center text-gray-500"
-                                      >
+                                      <td colSpan={3} className="py-8 text-center text-gray-500">
                                         No courses assigned to this college.
                                       </td>
                                     </tr>
                                   ) : (
                                     collegeCourses.map((course) => {
-                                      const active =
-                                        (course.status || "").toLowerCase() ===
-                                        "published";
+                                      const active = (course.status || "").toLowerCase() === "published";
                                       return (
                                         <tr
                                           key={course.id}
-                                          className="border-b border-gray-100 hover:bg-gray-50 transition"
+                                          className="border-b border-gray-100 transition hover:bg-gray-50"
                                         >
                                           <td className="py-4 px-4">
                                             <div className="flex items-center gap-3">
-                                              <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 flex-none">
+                                              <div className="w-12 h-12 flex-none overflow-hidden rounded-lg bg-gray-100">
                                                 <img
-                                                  src={
-                                                    course.thumbnail ||
-                                                    "/placeholder.png"
-                                                  }
+                                                  src={course.thumbnail || "/placeholder.png"}
                                                   alt={course.title}
-                                                  className="w-full h-full object-cover"
+                                                  className="h-full w-full object-cover"
                                                 />
                                               </div>
                                               <div className="min-w-0">
-                                                <h4 className="font-medium text-gray-900 truncate">
+                                                <h4 className="truncate font-medium text-gray-900">
                                                   {course.title}
                                                 </h4>
-                                                <p className="text-sm text-gray-600 truncate">
-                                                  {course.description ||
-                                                    "No description"}
-                                                </p>
+                                                {/* <p className="truncate text-sm text-gray-600">
+                                                  {course.description || "No description"}
+                                                </p> */}
                                               </div>
                                             </div>
                                           </td>
-                                          <td className="py-4 px-4">
-                                            <Badge
-                                              variant={
-                                                active ? "success" : "secondary"
-                                              }
-                                              size="sm"
-                                            >
-                                              {active ? "Active" : "Inactive"}
-                                            </Badge>
-                                          </td>
+                                         
                                           <td className="py-4 px-4">
                                             <button
-                                              disabled={
-                                                courseUpdatingId === course.id
-                                              }
-                                              onClick={() =>
-                                                toggleCourseActive(course)
-                                              }
-                                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${active
-                                                ? "bg-primary-600"
-                                                : "bg-gray-200"
-                                                }`}
+                                              onClick={() => handleUnassign(course)}
+                                              disabled={unassigningId === course.id}
+                                              className="inline-flex h-8 items-center justify-center rounded-md bg-red-50 px-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50"
                                             >
-                                              <span
-                                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${active
-                                                  ? "translate-x-6"
-                                                  : "translate-x-1"
-                                                  }`}
-                                              />
-                                              {courseUpdatingId ===
-                                                course.id && (
-                                                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                                                    <svg
-                                                      className="animate-spin h-4 w-4 text-primary-600"
-                                                      xmlns="http://www.w3.org/2000/svg"
-                                                      fill="none"
-                                                      viewBox="0 0 24 24"
-                                                    >
-                                                      <circle
-                                                        className="opacity-25"
-                                                        cx="12"
-                                                        cy="12"
-                                                        r="10"
-                                                        stroke="currentColor"
-                                                        strokeWidth="4"
-                                                      ></circle>
-                                                      <path
-                                                        className="opacity-75"
-                                                        fill="currentColor"
-                                                        d="M4 12a8 8 0 018-8v8z"
-                                                      ></path>
-                                                    </svg>
-                                                  </span>
-                                                )}
+                                              {unassigningId === course.id ? (
+                                                // Simple spinner for loading state
+                                                <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                                </svg>
+                                              ) : (
+                                                "Unassign"
+                                              )}
                                             </button>
                                           </td>
                                         </tr>
@@ -1777,7 +1712,7 @@ export default function SuperAdminDashboardPage() {
                           const enrolled = num(college.enrolledStudents);
                           const certs = num(college.certificatesGenerated);
                           const courseCount = num(college.courseCount);
-                          console.log("Rendering college:", college.name, { managed, assigned, instructorCount, studentCount, enrolled, certs });
+                          // console.log("Rendering college:", college.name, { managed, assigned, instructorCount, studentCount, enrolled, certs });
                           return (
                             <tr
                               key={college.id}
@@ -1839,7 +1774,7 @@ export default function SuperAdminDashboardPage() {
                               <td className="py-4 px-4">
                                 <div className="text-center">
                                   <Badge variant="info" size="sm">
-                                   {courseCount}
+                                    {courseCount}
                                   </Badge>
                                 </div>
                               </td>
@@ -1862,7 +1797,7 @@ export default function SuperAdminDashboardPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="permissions">
+          {/* <TabsContent value="permissions">
             <div className="space-y-6">
               <Card className="p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
@@ -1913,7 +1848,7 @@ export default function SuperAdminDashboardPage() {
                 <div className="p-6 text-red-600">{usersError}</div>
               )}
 
-              {/* Admins */}
+              
               {!loadingUsers &&
                 !usersError &&
                 (filterRole === "all" || filterRole === "admin") && (
@@ -2013,7 +1948,7 @@ export default function SuperAdminDashboardPage() {
                   </Card>
                 )}
 
-              {/* Instructors */}
+            
               {!loadingUsers &&
                 !usersError &&
                 (filterRole === "all" || filterRole === "instructor") && (
@@ -2113,11 +2048,11 @@ export default function SuperAdminDashboardPage() {
                   </Card>
                 )}
             </div>
-          </TabsContent>
+          </TabsContent>  */}
 
           <TabsContent value="assignments">
             <div className="space-y-6">
-              <Card className="p-5 sm:p-6">
+              {/* <Card className="p-5 sm:p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
                   Admin-Course Assignments
                 </h3>
@@ -2206,7 +2141,7 @@ export default function SuperAdminDashboardPage() {
                     );
                   })}
                 </div>
-              </Card>
+              </Card> */}
 
               <Card className="p-5 sm:p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -2234,31 +2169,42 @@ export default function SuperAdminDashboardPage() {
                               <h4 className="font-medium text-gray-900 truncate">
                                 {course.title}
                               </h4>
-                              <p className="text-xs text-gray-500 truncate">
+                              {/* <p className="text-xs text-gray-500 truncate">
                                 Managed by: {course.managerName || "—"}
-                              </p>
+                              </p> */}
                             </div>
                           </div>
 
                           <div className="flex gap-2 flex-wrap items-center">
-                            <Badge variant="info" size="sm">
+                            {/* <Badge variant="info" size="sm">
                               {instructors.length} instructors
                             </Badge>
                             <Badge variant="success" size="sm">
                               {students.length} students
-                            </Badge>
+                            </Badge> */}
 
                             {canEditCourse(course) && (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => goEdit(course.id)}
-                                className="ml-auto"
+                                className="ml-auto bg-amber-300"
                               >
                                 <Pencil size={14} className="mr-1" />
                                 Edit
                               </Button>
                             )}
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenAssignModal(course)}
+                              className="ml-auto bg-green-500 text-white hover:bg-green-600"
+                            >
+                              <Pencil size={14} className="mr-1" />
+                              Assign Course
+                            </Button>
+
                           </div>
                         </div>
 
@@ -2308,7 +2254,7 @@ export default function SuperAdminDashboardPage() {
                             )}
                           </div>
 
-                          <div>
+                          {/* <div>
                             <h5 className="text-sm font-medium text-gray-700 mb-2">
                               Enrolled Students:
                             </h5>
@@ -2342,7 +2288,7 @@ export default function SuperAdminDashboardPage() {
                                 No students enrolled
                               </p>
                             )}
-                          </div>
+                          </div> */}
                         </div>
                       </div>
                     );
@@ -2351,6 +2297,18 @@ export default function SuperAdminDashboardPage() {
               </Card>
             </div>
           </TabsContent>
+
+          {courseToAssign && (
+
+            <AssignCourseModal
+              isOpen={isAssignModalOpen}
+              onClose={handleCloseAssignModal}
+              onSuccess={handleAssignSuccess}
+              course={courseToAssign}
+              colleges={colleges}
+            />
+
+          )}
 
           <TabsContent value="students">
             <div className="space-y-6">
