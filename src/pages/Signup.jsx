@@ -66,11 +66,10 @@ const SignupPage = () => {
   };
 
   const handleVerifyOtp = async ({ email, otp }) => {
-    console.log("Verifying OTP with values:", { email, otp });
+   
     try {
       const response = await authAPI.loginOtpVerify(email, otp);
-      console.log("OTP verification response:", response);
-      console.log("Received registration data:", response.registration);
+     
       const registration = response.registration;
 
       localStorage.setItem("reg_data", JSON.stringify(registration));

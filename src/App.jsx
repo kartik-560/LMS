@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Navbar from "./components/layout/Navbar";
-import  useAuthStore  from "./store/useAuthStore";
+import useAuthStore from "./store/useAuthStore";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import CourseCatalogPage from "./pages/CourseCatalogPage";
@@ -19,7 +19,9 @@ import Terms from "./pages/TermsPage";
 import Privacy from "./pages/PrivacyPage";
 import Signup from "./pages/Signup";
 import AddcollegePage from "./pages/AddcollegePage";
-
+import CertificateTestPage from "./pages/CertificateTestPage";
+import Certificate from "./components/Certificate";
+import CourseListPage from "./pages/CourseListPage";
 
 const ROLE = {
   SUPERADMIN: "SUPERADMIN",
@@ -82,6 +84,8 @@ const App = () => {
       <Routes>
         {/* Public */}
         <Route path="/" element={<LandingPage />} />
+
+        <Route path="/test-certificate" element={<Certificate />} />
         <Route
           path="/courses"
           element={
@@ -97,6 +101,23 @@ const App = () => {
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/courses-list"
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                ROLE.STUDENT,
+                ROLE.ADMIN,
+                ROLE.SUPERADMIN,
+                ROLE.INSTRUCTOR,
+              ]}
+            >
+              <CourseListPage />
+            </ProtectedRoute>
+          }
+        />
+     
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
@@ -207,8 +228,8 @@ const App = () => {
           }
         />
 
-        
- <Route
+
+        <Route
           path="/create_finaltest"
           element={
             <ProtectedRoute allowedRoles={[ROLE.SUPERADMIN]}>

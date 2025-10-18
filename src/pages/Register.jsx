@@ -17,7 +17,7 @@ const Register = () => {
     if (storedData) {
       try {
         const parsedData = JSON.parse(storedData);
-        console.log("Stored registration data:", parsedData);
+      
 
         setUserData(parsedData);
         setRole(parsedData.role);
@@ -66,9 +66,6 @@ const Register = () => {
       formData.email = registrationData.email;
       formData.collegeId = registrationData.collegeId;
       formData.departmentId = registrationData.department?.id || null;
-
-
-      console.log("Submitting registration with data:", formData);
 
 
       const response = await authAPI.completeSignup(formData);

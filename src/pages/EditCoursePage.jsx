@@ -1,4 +1,4 @@
-// EditCoursePage.jsx — UI/flow matched to CreateCoursePage
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -17,7 +17,6 @@ import api, {
   assessmentsAPI,
 } from "../services/api";
 
-/* ------------------------------ helpers ------------------------------ */
 const unwrap = (res) =>
   res?.data?.data ??
   res?.data?.result ??
@@ -183,6 +182,8 @@ export default function EditCoursePage() {
     },
   ]);
 
+  const [chaptersToDelete, setChaptersToDelete] = useState([]);
+
   const {
     register,
     handleSubmit,
@@ -212,6 +213,12 @@ export default function EditCoursePage() {
   };
 
   const removeLesson = (id) => {
+
+    const lessonToRemove = lessons.find(l => l.id === id);
+
+    if (lessonToRemove?._chapterId) {
+      setChaptersToDelete(prev => [...prev, lessonToRemove._chapterId]);
+    }
     setLessons((prev) => (prev.length > 1 ? prev.filter((l) => l.id !== id) : prev));
   };
 
@@ -296,127 +303,8 @@ export default function EditCoursePage() {
     );
   };
 
-  /* ------------------------------ load existing ------------------------------ */
-  // useEffect(() => {
-  //   (async () => {
-  //     try {
-  //       setInitialLoading(true);
-  //       if (token) api.defaults.headers.common.Authorization = `Bearer ${token}`;
-
-  //       const courseRes = await coursesAPI.get(courseId);
-  //       const c = unwrap(courseRes);
-  //       if (!c?.id) throw new Error("Course not found");
-
-  //       // basic form fields
-  //       reset({
-  //         title: c?.title || "",
-  //         category: c?.category || "",
-  //         description: c?.description || "",
-  //       });
-
-  //       // thumbnail preview like Create
-  //       setCourseImage(c?.thumbnail || null);
-
-  //       // chapters
-  //       let chapters = Array.isArray(c?.chapters) ? c.chapters : [];
-  //       if (!chapters.length) {
-  //         const listRes = await chaptersAPI.listByCourse(courseId);
-  //         const maybe = unwrap(listRes);
-  //         chapters = Array.isArray(maybe) ? maybe : Array.isArray(maybe?.items) ? maybe.items : [];
-  //       }
-
-  //       chapters.sort((a, b) => (a?.order || 0) - (b?.order || 0));
-
-  //       // build lessons in the SAME SHAPE as Create
-  //       const built = [];
-  //       for (const ch of chapters) {
-  //         // find chapter assessment (if any)
-  //         let assessment = null;
-  //         try {
-  //           const aRes = await assessmentsAPI.listByChapter(ch.id);
-  //           const aMaybe = unwrap(aRes);
-  //           const aList = Array.isArray(aMaybe)
-  //             ? aMaybe
-  //             : Array.isArray(aMaybe?.items)
-  //               ? aMaybe.items
-  //               : Array.isArray(aMaybe?.results)
-  //                 ? aMaybe.results
-  //                 : [];
-  //           assessment =
-  //             aList.find((x) => String(x?.scope || "").toLowerCase() === "chapter") || aList[0] || null;
-
-  //           if (assessment && !Array.isArray(assessment.questions)) {
-  //             const aOne = await assessmentsAPI.get(assessment.id);
-  //             const aFull = unwrap(aOne);
-  //             if (aFull?.id) assessment = aFull;
-  //           }
-  //         } catch (err) {
-  //           console.error(`Failed to fetch assessment for chapter ${ch.id}:`, err);
-  //         }
-  //         if (assessment) {
-  //           const durationMin = assessment?.timeLimitSeconds
-  //             ? Math.round(Number(assessment.timeLimitSeconds) / 60)
-  //             : "";
-  //           const uiQuestions = Array.isArray(assessment?.questions)
-  //             ? assessment.questions.map(mapAPIQuestionToUI)
-  //             : [emptyQuizQuestion()];
-
-  //           built.push({
-  //             id: crypto.randomUUID(),
-  //             type: "test",
-  //             title: "", // not used for test in Create UX
-  //             content: "",
-  //             pdfFile: null,
-  //             quizTitle: assessment?.title || ch?.title || "",
-  //             quizDurationMinutes: durationMin,
-  //             questions: uiQuestions,
-  //             _chapterId: ch.id,
-  //             _assessmentId: assessment?.id || null,
-  //           });
-  //         } else {
-  //           built.push({
-  //             id: crypto.randomUUID(),
-  //             type: "text",
-  //             title: ch?.title || "",
-  //             content: ch?.content || "",
-  //             pdfFile: null,
-  //             quizTitle: "",
-  //             quizDurationMinutes: "",
-  //             questions: [emptyQuizQuestion()],
-  //             _chapterId: ch.id,
-  //             _assessmentId: null,
-  //           });
-  //         }
-  //       }
-
-  //       setLessons(built.length ? built : [
-  //         {
-  //           id: crypto.randomUUID(),
-  //           type: "text",
-  //           title: "",
-  //           content: "",
-  //           pdfFile: null,
-  //           quizTitle: "",
-  //           quizDurationMinutes: "",
-  //           questions: [emptyQuizQuestion()],
-  //           _chapterId: null,
-  //           _assessmentId: null,
-  //         },
-  //       ]);
-  //     } catch (err) {
-  //       console.error(err);
-  //       toast.error(err?.response?.data?.message || "Failed to load course.");
-  //       navigate(-1);
-  //     } finally {
-  //       setInitialLoading(false);
-  //     }
-  //   })();
-  // }, [courseId, token, navigate, reset]);
-
   useEffect(() => {
     const loadCourseData = async () => {
-
-
       try {
         setInitialLoading(true);
         if (token) api.defaults.headers.common.Authorization = `Bearer ${token}`;
@@ -432,12 +320,11 @@ export default function EditCoursePage() {
         });
         setCourseImage(c?.thumbnail || null);
 
-
         const chaptersRes = await chaptersAPI.listByCourse(courseId);
         let chapters = unwrap(chaptersRes) || [];
         chapters.sort((a, b) => (a?.order || 0) - (b?.order || 0));
 
-        console.log("Fetched chapters:", chapters);
+    
 
         const assessmentPromises = chapters.map(ch =>
           assessmentsAPI.listByChapter(ch.id)
@@ -451,12 +338,10 @@ export default function EditCoursePage() {
 
         const chapterAssessments = await Promise.all(assessmentPromises);
 
-        // Create a lookup map for easy access
         const assessmentMap = new Map(
-          chapterAssessments.map(item => [item.chapterId, item.assessments[0]]) // Assuming one assessment per chapter
+          chapterAssessments.map(item => [item.chapterId, item.assessments[0]])
         );
 
-        // 3. Build the lessons state using the fetched data
         const builtLessons = chapters.map(ch => {
           const assessment = assessmentMap.get(ch.id);
 
@@ -468,12 +353,14 @@ export default function EditCoursePage() {
               id: crypto.randomUUID(),
               type: "test",
               quizTitle: assessment?.title || ch?.title || "",
+              content: ch?.content || "", // <-- FIX: Always include the chapter's content
               quizDurationMinutes: durationMin,
               questions: uiQuestions.length ? uiQuestions : [emptyQuizQuestion()],
               _chapterId: ch.id,
               _assessmentId: assessment.id,
-              // unused fields
-              title: "", content: "", pdfFile: null,
+              // Unused fields for this lesson type
+              title: "",
+              pdfFile: null,
             };
           } else {
             return {
@@ -482,8 +369,12 @@ export default function EditCoursePage() {
               title: ch?.title || "",
               content: ch?.content || "",
               _chapterId: ch.id,
-              // unused fields
-              pdfFile: null, quizTitle: "", quizDurationMinutes: "", questions: [emptyQuizQuestion()], _assessmentId: null,
+              // Unused fields for this lesson type
+              pdfFile: null,
+              quizTitle: "",
+              quizDurationMinutes: "",
+              questions: [emptyQuizQuestion()],
+              _assessmentId: null,
             };
           }
         });
@@ -585,7 +476,16 @@ export default function EditCoursePage() {
         status: "published",
       });
 
-      // upsert chapters + assessments (no “delete chapter” button in Create UX — so we won’t auto-delete missing ones)
+
+      for (const chapterId of chaptersToDelete) {
+        try {
+          await chaptersAPI.remove(chapterId);
+        } catch (err) {
+          // Log a warning but don't stop the whole process
+          console.warn(`Failed to delete chapter ${chapterId}:`, err);
+        }
+      }
+
       for (const [index, l] of lessons.entries()) {
         const order = index + 1;
 
@@ -607,7 +507,7 @@ export default function EditCoursePage() {
 
           if (l._chapterId) {
             await chaptersAPI.update(l._chapterId, chapterPayload);
-            // if there was an assessment earlier on this chapter, remove it (to align with Create UX where "text" has no quiz)
+
             if (l._assessmentId) {
               try {
                 await assessmentsAPI.remove(l._assessmentId);
@@ -791,7 +691,7 @@ export default function EditCoursePage() {
                   {lessons.map((lesson, idx) => (
                     <div key={lesson.id} className="border border-gray-200 rounded-lg p-4">
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        {lesson.type === "text" ? (
+                        {lesson.type === "text" && (
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Chapter Title</label>
                             <input
@@ -803,8 +703,6 @@ export default function EditCoursePage() {
                               placeholder={`Chapter ${idx + 1}`}
                             />
                           </div>
-                        ) : (
-                          <div className="hidden md:block" />
                         )}
 
                         {lesson.type === "text" && (
@@ -816,11 +714,12 @@ export default function EditCoursePage() {
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                             >
                               <option value="text">Text & PDF</option>
+                              {/* You can re-enable this if you want to switch from Text to Quiz */}
                               {/* <option value="test">Quiz</option> */}
                             </select>
                           </div>
                         )}
-
+                        <div className={lesson.type === 'test' ? "hidden md:block" : "hidden"} />
                         <div className="hidden md:block" />
                         <div className="flex items-end">
                           <Button
@@ -835,34 +734,36 @@ export default function EditCoursePage() {
                         </div>
                       </div>
 
-                      {lesson.type === "text" ? (
-                        <div className="mt-4 space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Chapter Content</label>
-                            <textarea
-                              rows={3}
-                              value={lesson.content}
-                              onChange={(e) => updateLesson(lesson.id, "content", e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                              placeholder="Describe what this lesson covers..."
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Upload PDF (Optional)
-                            </label>
-                            <input
-                              type="file"
-                              accept="application/pdf"
-                              onChange={(e) => updateLesson(lesson.id, "pdfFile", e.target.files[0])}
-                              className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-                            />
-                            {lesson.pdfFile && (
-                              <p className="mt-2 text-sm text-gray-600">Selected: {lesson.pdfFile.name}</p>
-                            )}
-                          </div>
+
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Chapter Content</label>
+                          <textarea
+                            rows={3}
+                            value={lesson.content}
+                            onChange={(e) => updateLesson(lesson.id, "content", e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            placeholder="Describe what this lesson covers..."
+                          />
                         </div>
-                      ) : (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Upload PDF (Optional)
+                          </label>
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            onChange={(e) => updateLesson(lesson.id, "pdfFile", e.target.files[0])}
+                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                          />
+                          {lesson.pdfFile && (
+                            <p className="mt-2 text-sm text-gray-600">Selected: {lesson.pdfFile.name}</p>
+                          )}
+                        </div>
+                      </div>
+
+
+                      {lesson.type === 'test' && (
                         <div className="mt-4 space-y-6">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="md:col-span-2">

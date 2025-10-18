@@ -20,8 +20,6 @@ const Navbar = () => {
   const { user, isAuthenticated, userRole, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
-
-  // --- role normalization to handle "SUPERADMIN" / "super_admin" / "superadmin"
   const normalizeRole = (r) => {
     const v = String(r || "")
       .trim()
@@ -85,7 +83,7 @@ const Navbar = () => {
               <img
                 src={logo}
                 alt="Pugarch Logo"
-                className="h-12 sm:h-16 md:h-20 lg:h-24 xl:h-28 w-auto object-contain"
+           className="h-10 md:h-12 lg:h-16 w-auto object-contain"
               />
             </div>
           </Link>
@@ -169,7 +167,7 @@ const Navbar = () => {
             )}
           </div>
 
-          {/* User Menu / Auth Buttons */}
+ 
           <div className="hidden lg:flex items-center space-x-3 xl:space-x-4">
             {isAuthenticated ? (
               <div className="flex items-center space-x-2 xl:space-x-3">

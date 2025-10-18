@@ -417,7 +417,8 @@ export const progressAPI = {
 };
 
 export const departmentAPI = {
-  getDepartments: () => api.get("auth/signup/departments-catalog"),
+  getDepartments: () => api.get("/auth/signup/departments-catalog"),
+  postDepartment: (data) => api.post("auth/departments", data),
 };
 
 export default api;

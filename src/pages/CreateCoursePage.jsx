@@ -8,7 +8,7 @@ import Input from "../components/ui/Input";
 import useAuthStore from "../store/useAuthStore";
 import ImagePicker from "./Imagepicker";
 
-import api, {
+import  {
   coursesAPI,
   chaptersAPI,
   uploadsAPI,
@@ -355,7 +355,6 @@ export default function CreateCoursePage() {
         description: data.description,
       };
 
-      console.log("Sending course creation payload:", coursePayload);
       const course = await coursesAPI.create(coursePayload);
       const courseId = course?.id ?? course?.data?.id ?? null;
       if (!courseId) throw new Error("Failed to create course");
@@ -573,7 +572,7 @@ export default function CreateCoursePage() {
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                             >
                               <option value="text">Text & PDF</option>
-                              <option value="test">Quiz</option>
+                            
                             </select>
                           </div>
                         )}

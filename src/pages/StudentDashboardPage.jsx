@@ -18,6 +18,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
+
 import {
   authAPI,
   coursesAPI,
@@ -62,12 +63,12 @@ const StudentDashboardPage = () => {
   });
 
   useEffect(() => {
-    if (!hasHydrated) return;
-    if (!isAuthenticated) {
+    if (!hasHydrated || !isAuthenticated) {
       setLoading(false);
       return;
     }
     fetchStudentData();
+
   }, [hasHydrated, isAuthenticated]);
 
   const fetchStudentData = async () => {
@@ -91,7 +92,6 @@ const StudentDashboardPage = () => {
     try {
       setLoading(true);
 
-      // Identify user/role
       const meResp = await authAPI.me().catch(() => null);
       const me = (meResp && (meResp.data ?? meResp)) || null;
 
@@ -117,7 +117,6 @@ const StudentDashboardPage = () => {
         return () => abort.abort();
       }
 
-      // Enrollments
       const enrollsResp = await enrollmentsAPI.listSelf().catch(() => null);
       const safeEnrolls = Array.isArray(enrollsResp?.data?.data)
         ? enrollsResp.data.data
@@ -146,18 +145,17 @@ const StudentDashboardPage = () => {
         return () => abort.abort();
       }
 
-      // Primary source: getStudentCourses
       let myCourses = [];
       try {
         const resp = await coursesAPI.getStudentCourses(
           user && user.collegeId,
           studentId,
-          "", // search
-          "all", // status
-          "all", // category
-          "assigned", // view (adjust if your API differs)
-          1, // page
-          200 // pageSize
+          "",
+          "all",
+          "all",
+          "assigned",
+          1,
+          200
         );
         myCourses =
           resp?.data?.data ?? resp?.data ?? (Array.isArray(resp) ? resp : []);
@@ -165,7 +163,7 @@ const StudentDashboardPage = () => {
         console.warn("getStudentCourses failed; will try fallback", e);
       }
 
-      // Fallback by catalog
+
       const fetchCoursesByIds = async (ids) => {
         const resp = await coursesAPI
           .getCourseCatalog({
@@ -185,11 +183,12 @@ const StudentDashboardPage = () => {
               : [];
 
         return list.filter((c) => ids.includes(c.id || c.courseId));
+        console.log("Fetched by IDs", list);
       };
 
       const normalizeCourse = (c) => {
         const cid = c?.id ?? c?.courseId ?? c?.course?.id;
-        return { ...c, id: cid }; // force .id to be the real courseId
+        return { ...c, id: cid };
       };
 
       if (!Array.isArray(myCourses) || myCourses.length === 0) {
@@ -202,27 +201,38 @@ const StudentDashboardPage = () => {
         return () => abort.abort();
       }
 
-      // Fetch per-course data in parallel
-      const [chaptersList, summaries] = await Promise.all([
+      const [chaptersList, completedChaptersList, summaries] = await Promise.all([
         Promise.all(
           myCourses.map((c) =>
             chaptersAPI
-              .listByCourse(c.id, { signal: abort.signal }) // c.id is guaranteed
+
+              .listByCourse(c.courseId ?? c.id)
               .then((r) => r?.data?.data ?? r?.data ?? [])
               .catch(() => [])
           )
         ),
+
         Promise.all(
           myCourses.map((c) =>
             progressAPI
-              .courseSummary(c.id, { signal: abort.signal }) // c.id is guaranteed
+
+              .completedChapters(c.courseId ?? c.id)
+              .then((r) => r?.data?.data ?? r?.data ?? [])
+              .catch(() => [])
+          )
+        ),
+
+        Promise.all(
+          myCourses.map((c) =>
+            progressAPI
+              // 👇 CORRECTED LINE
+              .courseSummary(c.courseId ?? c.id)
               .then((r) => r?.data?.data ?? null)
-              .catch(() => null)
+              .catch(() => [])
           )
         ),
       ]);
 
-      // Build fresh objects (no mutation of myCourses)
       const nextProgressData = {};
       const nextAiStatusData = {};
       const nextCourseWithCounts = [];
@@ -232,35 +242,24 @@ const StudentDashboardPage = () => {
       let totalTestsTaken = 0;
 
       myCourses.forEach((course, i) => {
-        const chapters = chaptersList[i] || [];
-        const sum = summaries[i] || {
-          chapters: { done: 0, total: chapters.length },
-          modules: { done: 0, total: 0 },
-          tests: { averagePercent: 0, taken: 0 },
-        };
+        const totalCourseChapters = chaptersList[i] || [];
+        const completedCourseChapters = completedChaptersList[i] || [];
+        const sum = summaries[i] || {}; // Only used for test data
 
-        const done = Number((sum.chapters && sum.chapters.done) ?? 0);
-        const total = Number(
-          (sum.chapters && sum.chapters.total) ?? chapters.length
-        );
-        const taken = Number((sum.tests && sum.tests.taken) ?? 0);
-        const avg = Number((sum.tests && sum.tests.averagePercent) ?? 0);
+        // Use the length of the arrays for an accurate count
+        const done = completedCourseChapters.length;
+        const total = totalCourseChapters.length;
+        const taken = Number(sum.tests?.taken ?? 0);
+        const avg = Number(sum.tests?.averagePercent ?? 0);
+
 
         nextProgressData[course.id] = {
-          completedChapters: Array(done).fill(0),
-          courseTestResult: {
-            averagePercent: avg,
-            taken: taken,
-            passed: avg >= 60,
-          },
+
+          completedChapters: completedCourseChapters,
+          courseTestResult: { /* ... */ },
           aiInterviewResult: null,
         };
 
-        nextAiStatusData[course.id] = {
-          eligible: avg >= 60,
-          completed: false,
-          result: null,
-        };
 
         nextCourseWithCounts.push({
           ...course,
@@ -339,12 +338,14 @@ const StudentDashboardPage = () => {
     toast("Chapter viewer not wired yet");
   };
 
-  const completeChapter = async (_courseId, _moduleId, _chapterId) => {
+  const completeChapter = async (courseId, moduleId, chapterId) => {
     try {
-      toast("Progress API not wired yet");
+      await progressAPI.completeChapter(chapterId);
       await fetchStudentData();
+
       toast.success("Chapter completed!");
-    } catch {
+    } catch (error) {
+      console.error("Failed to complete chapter:", error);
       toast.error("Failed to update progress");
     }
   };
@@ -405,26 +406,35 @@ const StudentDashboardPage = () => {
 
   const getNextAction = (courseId) => {
     const progress = currentProgress[courseId];
-    if (!progress) return { type: "start", text: "Start Course" };
+    const course = assignedCourses.find((c) => c.id === courseId);
 
-    if (
-      aiInterviewStatus[courseId]?.eligible &&
-      !aiInterviewStatus[courseId]?.completed
-    ) {
-      return { type: "ai-interview", text: "Take AI Interview" };
+    if (!progress || !course) {
+      return { type: "start", text: "Start Course" };
     }
 
+    const allChaptersDone = (progress.completedChapters?.length || 0) >= course.totalChapters;
+
+    // 1. If not all chapters are done, the action is always to continue learning
+    if (!allChaptersDone) {
+      return { type: "continue", text: "Continue Learning" };
+    }
+
+    // 2. If chapters are done but the test isn't passed, take the test
     if (!progress.courseTestResult?.passed) {
       return { type: "course-test", text: "Take Final Test" };
     }
 
-    const availableCourseTests = availableTests.filter(
-      (t) => t.courseId === courseId
-    );
-    if (availableCourseTests.length > 0) {
-      return { type: "module-test", text: "Take Test" };
+    // 3. If the test is passed but the interview isn't done, take the interview
+    if (aiInterviewStatus[courseId]?.eligible && !aiInterviewStatus[courseId]?.completed) {
+      return { type: "ai-interview", text: "Take AI Interview" };
     }
 
+    // 4. If all steps are done, the course is complete
+    if (aiInterviewStatus[courseId]?.completed) {
+      return { type: "completed", text: "View Certificate", icon: Trophy };
+    }
+
+    // Fallback
     return { type: "continue", text: "Continue Learning" };
   };
 
@@ -433,6 +443,8 @@ const StudentDashboardPage = () => {
     const mins = minutes % 60;
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
+
+
 
   if (loading) {
     return (
@@ -463,12 +475,7 @@ const StudentDashboardPage = () => {
               <p className="text-sm sm:text-base text-gray-600">
                 Continue your learning journey and unlock new opportunities.
               </p>
-              {/* <Button
-                className="ml-auto"
-                onClick={() => navigate("/first-login")}
-              >
-                Go to First Login
-              </Button> */}
+
             </div>
           </div>
         </div>
@@ -559,8 +566,13 @@ const StudentDashboardPage = () => {
           {/* My Courses */}
           <div className="lg:col-span-2">
             <Card>
-              <Card.Header>
+              <Card.Header className="flex items-center justify-between">
                 <Card.Title>My Learning Path</Card.Title>
+                <Link to="/courses-list">
+                  <button className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75">
+                    View My Courses
+                  </button>
+                </Link>
               </Card.Header>
               <Card.Content>
                 {assignedCourses.length === 0 ? (
@@ -613,11 +625,13 @@ const StudentDashboardPage = () => {
 
                             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                               <Button
-                                key={course.id}
+                                key={`continue-${course.id}`}
                                 type="button"
                                 className="flex-1"
                                 onClick={() =>
-                                  goToCourse(course.courseId ?? course.course?.id ?? course.id)
+                                  goToCourse(
+                                    course.courseId ?? course.course?.id ?? course.id
+                                  )
                                 }
                               >
                                 <PlayCircle size={16} className="mr-2" />
@@ -625,6 +639,7 @@ const StudentDashboardPage = () => {
                               </Button>
 
                               <Button
+                                key={`action-${course.id}`}
                                 size="sm"
                                 className="w-full sm:w-auto"
                                 onClick={() => {

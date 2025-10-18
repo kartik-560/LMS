@@ -25,9 +25,8 @@ import {
 } from "../services/api";
 
 const CourseViewerPage = () => {
-  const { courseId } = useParams();
+  const { courseId, chapterId } = useParams();
   const navigate = useNavigate();
-
   const [course, setCourse] = useState(null);
   const [chapters, setChapters] = useState([]);
   const [currentChapter, setCurrentChapter] = useState(null);
@@ -35,23 +34,18 @@ const CourseViewerPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expanded, setExpanded] = useState(true);
   const [completedChapterIds, setCompletedChapterIds] = useState([]);
-
   const [quizLoading, setQuizLoading] = useState(false);
   const [quiz, setQuiz] = useState(null);
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState(null);
-
   const location = useLocation();
   const [searchParams] = useSearchParams();
-
-  // Prefer location.state, fall back to ?start=query param
   const startChapterIdFromState = location.state?.startChapterId ?? null;
   const startChapterIdFromQuery = searchParams.get("start");
   const preferredStartChapterId =
     startChapterIdFromState ?? startChapterIdFromQuery ?? null;
 
-  // map of chapterId -> index for quick next/prev
   const chapterIndexMap = useMemo(() => {
     const map = new Map();
     chapters.forEach((c, i) => map.set(c.id, i));
@@ -59,7 +53,9 @@ const CourseViewerPage = () => {
   }, [chapters]);
 
   useEffect(() => {
-    fetchData();
+    if (courseId) {
+      fetchData();
+    }
   }, [courseId]);
 
   const isQuizUnlocked = (chapter) => {
@@ -83,8 +79,32 @@ const CourseViewerPage = () => {
         status: c.status,
       });
 
+      // FIXED: Handle different response structures properly
       const listRaw = await chaptersAPI.listByCourse(courseId);
-      const list = Array.isArray(listRaw) ? listRaw : [];
+
+      // Handle nested response structures
+      let list = [];
+      if (Array.isArray(listRaw)) {
+        list = listRaw;
+      } else if (listRaw?.data?.data && Array.isArray(listRaw.data.data)) {
+        list = listRaw.data.data;
+      } else if (listRaw?.data && Array.isArray(listRaw.data)) {
+        list = listRaw.data;
+      } else if (listRaw?.chapters && Array.isArray(listRaw.chapters)) {
+        list = listRaw.chapters;
+      }
+
+      console.log("Raw chapters response:", listRaw);
+      console.log("Processed chapters list:", list);
+
+      if (!list || list.length === 0) {
+        console.warn("No chapters found for course:", courseId);
+        toast.error("No chapters available for this course");
+        setChapters([]);
+        setLoading(false);
+        return;
+      }
+
       const mapped = list
         .sort((a, b) => (a.order || 0) - (b.order || 0))
         .map((ch) => ({
@@ -103,6 +123,7 @@ const CourseViewerPage = () => {
           hasQuiz: Array.isArray(ch.assessments) && ch.assessments.length > 0,
         }));
 
+      console.log("Mapped chapters:", mapped);
       setChapters(mapped);
 
       if (mapped.length) {
@@ -113,17 +134,28 @@ const CourseViewerPage = () => {
           );
           if (found) {
             initial = found;
+            console.log("Using preferred start chapter:", initial);
           } else {
-            // Optional: inform if the requested chapter isn't found
-            // toast.error("Requested chapter not found, showing first chapter");
+            console.warn("Preferred chapter not found, using first:", initial);
           }
         }
         setCurrentChapter(initial);
         hydrateChapter(initial.id);
       }
 
-      const completed = await progressAPI.completedChapters(courseId);
-      const ids = completed?.data ?? completed;
+      // Fetch completed chapters
+      const completedResponse = await progressAPI.completedChapters(courseId);
+      let ids = [];
+
+      if (Array.isArray(completedResponse)) {
+        ids = completedResponse;
+      } else if (completedResponse?.data?.data && Array.isArray(completedResponse.data.data)) {
+        ids = completedResponse.data.data;
+      } else if (completedResponse?.data && Array.isArray(completedResponse.data)) {
+        ids = completedResponse.data;
+      }
+
+      console.log("Completed chapter IDs:", ids);
       setCompletedChapterIds(Array.isArray(ids) ? ids : []);
     } catch (err) {
       console.error("Course load failed:", err);
@@ -159,18 +191,20 @@ const CourseViewerPage = () => {
     completedChapterIds.join("|"),
   ]);
 
-  useEffect(() => {
-    if (!chapters.length) return;
-    if (!preferredStartChapterId) return;
 
-    const found = chapters.find(
-      (ch) => String(ch.id) === String(preferredStartChapterId)
-    );
-    if (found && currentChapter?.id !== found.id) {
-      setCurrentChapter(found);
+  useEffect(() => {
+    if (!chapters.length || !chapterId) return;
+
+    const activeChapter = chapters.find((ch) => String(ch.id) === String(chapterId));
+
+    if (activeChapter) {
+      setCurrentChapter(activeChapter);
+      // Hydrate if content is missing
+      if (!activeChapter.content) {
+        hydrateChapter(activeChapter.id);
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preferredStartChapterId, chapters.map((c) => c.id).join("|")]);
+  }, [chapters, chapterId]);
 
   async function loadQuizForChapter(chapterId) {
     setQuizLoading(true);
@@ -242,10 +276,12 @@ const CourseViewerPage = () => {
   };
 
   const markChapterComplete = async ({ advance = true } = {}) => {
+    // Now, `currentChapter.id` will be the correct, fresh ID
     if (!currentChapter || isChapterCompleted(currentChapter.id)) return;
+
     try {
       await progressAPI.completeChapter(currentChapter.id);
-      setCompletedChapterIds((prev) => [...prev, currentChapter.id]);
+      setCompletedChapterIds((prev) => [...new Set([...prev, currentChapter.id])]);
       toast.success("Chapter completed!");
 
       if (advance) {
@@ -363,6 +399,24 @@ const CourseViewerPage = () => {
     );
   }
 
+  if (!loading && chapters.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <BookOpen size={48} className="mx-auto text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            No chapters available
+          </h3>
+          <p className="text-gray-600 mb-4">
+            This course doesn't have any chapters yet.
+          </p>
+          <Button onClick={() => navigate("/courses")}>
+            Back to Courses
+          </Button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-gray-900 flex">
       {/* Sidebar */}
@@ -441,8 +495,8 @@ const CourseViewerPage = () => {
                         if (!chapter.content) hydrateChapter(chapter.id);
                       }}
                       className={`w-full p-3 text-left hover:bg-gray-50 transition-colors flex items-center space-x-3 ${currentChapter?.id === chapter.id
-                          ? "bg-primary-50 border-r-2 border-primary-500"
-                          : ""
+                        ? "bg-primary-50 border-r-2 border-primary-500"
+                        : ""
                         }`}
                     >
                       <div className="flex-shrink-0">

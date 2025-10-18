@@ -313,7 +313,7 @@ export default function AdminDashboardPage() {
           api.students(),
           api.courses(),
         ]);
-        console.log("Overview: ", ov)
+        
         setOverview(ov?.data?.overview ?? { courses: 0, students: 0, instructors: 0 });
 
         const normInstructors = (ins?.data || []).map((i) => ({

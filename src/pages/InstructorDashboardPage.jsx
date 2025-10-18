@@ -121,8 +121,6 @@ const InstructorDashboardPage = () => {
     fetchAll();
   }, [user?.id]);
 
-
-
   const fetchAll = async () => {
     try {
       setLoading(true);
@@ -157,11 +155,17 @@ const InstructorDashboardPage = () => {
         )
       );
 
+      console.log("Fetched Chapter Lists:", chapterLists);
+
       const modulesData = {};
       let totalChapters = 0;
 
       normalized.forEach((course, idx) => {
-        const chapters = chapterLists[idx] || [];
+       
+        const chapters = Array.isArray(chapterLists[idx]?.data)
+          ? chapterLists[idx].data
+          : [];
+
         modulesData[course.id] = chapters.map((ch, i) => ({
           id: ch.id,
           title: ch.title || `Chapter ${i + 1}`,
@@ -172,19 +176,21 @@ const InstructorDashboardPage = () => {
       });
       setCourseModules(modulesData);
 
- 
+
       const instrReqs = await fetchInstructorRequests(normalized);
       setEnrollmentRequests(instrReqs);
 
- 
+
       const enrollmentLists = await Promise.all(
         normalized.map((course) =>
           enrollmentsAPI.list({ courseId: course.id }).catch(() => [])
         )
       );
 
-      const studentMap = new Map();       
-      const progressByStudent = {};  
+      console.log("Fetched Enrollment Lists:", enrollmentLists);
+
+      const studentMap = new Map();
+      const progressByStudent = {};
 
       normalized.forEach((course, idx) => {
         const enrollments = enrollmentLists[idx] || [];
@@ -711,10 +717,10 @@ const InstructorDashboardPage = () => {
                             />
                             <div
                               className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${studentStatus.color === "success"
-                                  ? "bg-green-500"
-                                  : studentStatus.color === "warning"
-                                    ? "bg-yellow-500"
-                                    : "bg-gray-400"
+                                ? "bg-green-500"
+                                : studentStatus.color === "warning"
+                                  ? "bg-yellow-500"
+                                  : "bg-gray-400"
                                 }`}
                             ></div>
                           </div>
@@ -787,6 +793,7 @@ const InstructorDashboardPage = () => {
         </div>
       </div>
 
+
       {/* Course Details Modal */}
       <Modal
         isOpen={showCourseModal}
@@ -794,119 +801,149 @@ const InstructorDashboardPage = () => {
         title={selectedCourse?.title}
         size="lg"
       >
-        {selectedCourse && (
-          <div className="space-y-6">
-            <div className="flex items-center space-x-4">
-              <img
-                src={selectedCourse.thumbnail || FALLBACK_THUMB}
-                alt={selectedCourse.title}
-                className="w-20 h-20 rounded-lg object-cover"
-              />
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {selectedCourse.title}
-                </h3>
-                <p className="text-gray-600">{selectedCourse.description}</p>
-                <div className="flex items-center space-x-2 mt-2">
-                  <Badge variant="info">{selectedCourse.level || "—"}</Badge>
-                  <Badge variant="default">{selectedCourse.category || "—"}</Badge>
-                  <Badge
-                    variant={
-                      (selectedCourse.status || "draft") === "published"
-                        ? "success"
-                        : "warning"
-                    }
-                  >
-                    {selectedCourse.status || "draft"}
-                  </Badge>
-                </div>
-              </div>
-            </div>
+        {selectedCourse && (() => {
+          // ✨ NEW: Calculate progress for the selected course
+          const enrolledStudentsInCourse = myStudents.filter((s) =>
+            (s.assignedCourses || []).includes(selectedCourse.id)
+          );
+          const courseAvgProgress =
+            enrolledStudentsInCourse.length > 0
+              ? enrolledStudentsInCourse.reduce(
+                (sum, student) =>
+                  sum + getStudentCourseProgress(student.id, selectedCourse.id),
+                0
+              ) / enrolledStudentsInCourse.length
+              : 0;
 
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <div className="text-xl font-bold text-blue-600">
-                  {(courseModules[selectedCourse.id] || []).length}
-                </div>
-                <div className="text-sm text-blue-800">Modules</div>
-              </div>
-              <div className="p-3 bg-green-50 rounded-lg">
-                <div className="text-xl font-bold text-green-600">
-                  {selectedCourse.totalChapters ??
-                    (courseModules[selectedCourse.id] || []).length}
-                </div>
-                <div className="text-sm text-green-800">Chapters</div>
-              </div>
-              <div className="p-3 bg-purple-50 rounded-lg">
-                <div className="text-xl font-bold text-purple-600">
-                  {
-                    myStudents.filter((s) =>
-                      (s.assignedCourses || []).includes(selectedCourse.id)
-                    ).length
-                  }
-                </div>
-                <div className="text-sm text-purple-800">Students</div>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="font-medium text-gray-900 mb-3">Course Modules</h4>
-              <div className="space-y-2">
-                {(courseModules[selectedCourse.id] || []).map((module, index) => (
-                  <div
-                    key={module.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                        <span className="text-sm font-medium text-primary-600">
-                          {index + 1}
-                        </span>
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-900">
-                          {module.title}
-                        </h4>
-                        <p className="text-xs text-gray-500">
-                          {module.totalChapters} chapters • {module.estimatedDuration}
-                        </p>
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm">
-                      <Edit size={14} />
-                    </Button>
+          return (
+            <div className="space-y-6">
+              <div className="flex items-center space-x-4">
+                <img
+                  src={selectedCourse.thumbnail || FALLBACK_THUMB}
+                  alt={selectedCourse.title}
+                  className="w-20 h-20 rounded-lg object-cover"
+                />
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {selectedCourse.title}
+                  </h3>
+                  <p className="text-gray-600">{selectedCourse.description}</p>
+                  <div className="flex items-center space-x-2 mt-2">
+                    <Badge variant="info">{selectedCourse.level || "—"}</Badge>
+                    <Badge variant="default">{selectedCourse.category || "—"}</Badge>
+                    <Badge
+                      variant={
+                        (selectedCourse.status || "draft") === "published"
+                          ? "success"
+                          : "warning"
+                      }
+                    >
+                      {selectedCourse.status || "draft"}
+                    </Badge>
                   </div>
-                ))}
+                </div>
+              </div>
+
+              {/* 🔄 MODIFIED: Changed grid to 4 columns to fit the new stat */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <div className="text-xl font-bold text-blue-600">
+                    {(courseModules[selectedCourse.id] || []).length}
+                  </div>
+                  <div className="text-sm text-blue-800">Modules</div>
+                </div>
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <div className="text-xl font-bold text-green-600">
+                    {selectedCourse.totalChapters ??
+                      (courseModules[selectedCourse.id] || []).length}
+                  </div>
+                  <div className="text-sm text-green-800">Chapters</div>
+                </div>
+                <div className="p-3 bg-purple-50 rounded-lg">
+                  <div className="text-xl font-bold text-purple-600">
+                    {enrolledStudentsInCourse.length}
+                  </div>
+                  <div className="text-sm text-purple-800">Students</div>
+                </div>
+                {/* ✨ NEW: Added average progress stat card */}
+                <div className="p-3 bg-yellow-50 rounded-lg">
+                  <div className="text-xl font-bold text-yellow-600">
+                    {Math.round(courseAvgProgress)}%
+                  </div>
+                  <div className="text-sm text-yellow-800">Avg. Progress</div>
+                </div>
+              </div>
+
+              {/* ✨ NEW: Added a visual progress bar */}
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="text-gray-600">Average Student Progress</span>
+                  <span className="font-medium text-gray-900">
+                    {Math.round(courseAvgProgress)}%
+                  </span>
+                </div>
+                <Progress value={courseAvgProgress} />
+              </div>
+
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3">Course Modules</h4>
+                <div className="space-y-2">
+                  {(courseModules[selectedCourse.id] || []).map((module, index) => (
+                    <div
+                      key={module.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-primary-600">
+                            {index + 1}
+                          </span>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900">
+                            {module.title}
+                          </h4>
+                          <p className="text-xs text-gray-500">
+                            {module.totalChapters} chapters • {module.estimatedDuration}
+                          </p>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        <Edit size={14} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex space-x-3">
+                <Button
+                  className="flex-1"
+                  onClick={() => {
+                    setShowCourseModal(false);
+                    navigate(`/courses/${selectedCourse.id}/edit`);
+                  }}
+                >
+                  <Edit size={16} className="mr-2" />
+                  Edit Course
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCourseModal(false);
+                    setSelectedCourse(
+                      assignedCourses.find((c) => c.id === selectedCourse.id)
+                    );
+                    setShowAnalyticsModal(true);
+                  }}
+                >
+                  <BarChart3 size={16} className="mr-2" />
+                  Analytics
+                </Button>
               </div>
             </div>
-
-            <div className="flex space-x-3">
-              <Button
-                className="flex-1"
-                onClick={() => {
-                  setShowCourseModal(false);
-                  navigate(`/courses/${selectedCourse.id}/edit`);
-                }}
-              >
-                <Edit size={16} className="mr-2" />
-                Edit Course
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowCourseModal(false);
-                  setSelectedCourse(
-                    assignedCourses.find((c) => c.id === selectedCourse.id)
-                  );
-                  setShowAnalyticsModal(true);
-                }}
-              >
-                <BarChart3 size={16} className="mr-2" />
-                Analytics
-              </Button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
 
       {/* Student Management Modal */}
@@ -973,10 +1010,10 @@ const InstructorDashboardPage = () => {
                       />
                       <div
                         className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${studentStatus.color === "success"
-                            ? "bg-green-500"
-                            : studentStatus.color === "warning"
-                              ? "bg-yellow-500"
-                              : "bg-gray-400"
+                          ? "bg-green-500"
+                          : studentStatus.color === "warning"
+                            ? "bg-yellow-500"
+                            : "bg-gray-400"
                           }`}
                       ></div>
                     </div>

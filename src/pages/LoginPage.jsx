@@ -63,46 +63,7 @@ const LoginPage = () => {
     window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;
   };
 
-  // Handle Email Login
-  // const handleEmailSignup = async ({ email, password }) => {
-  //   setIsLoading(true);
-  //   try {
-  //     const resp = await authAPI.login({ email, password });
 
-  //     const payload = resp?.data?.data ?? resp?.data ?? resp;
-  //     const user = payload?.user;
-  //     const token = payload?.token;
-  //      console.log("Final check: User object from API payload:", user);
-  //     if (!user || !token) throw new Error("Malformed login response");
-
-  //     const canonicalRole = getCanonicalRole(user);
-  //     setAuthToken(token);
-  //     localStorage.setItem("auth_token", token);
-  //     localStorage.setItem("user_role", canonicalRole);
-  //     localStorage.setItem("user", JSON.stringify({ ...user, role: canonicalRole }));
-  //     useAuthStore.getState().login({ ...user, role: canonicalRole }, token);
-
-  //     switch (canonicalRole) {
-  //       case ROLE.SUPERADMIN:
-  //         navigate("/superadmin", { replace: true });
-  //         break;
-  //       case ROLE.ADMIN:
-  //         navigate("/admin", { replace: true });
-  //         break;
-  //       case ROLE.INSTRUCTOR:
-  //         navigate("/instructor", { replace: true });
-  //         break;
-  //       default:
-  //         navigate("/dashboard", { replace: true });
-  //         break;
-  //     }
-  //   } catch (e) {
-  //     console.error("Login error:", e);
-  //     toast.error(e?.response?.data?.message || e?.message || "Login failed");
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
   const handleEmailSignup = async ({ email, password }) => {
     setIsLoading(true);
     try {
