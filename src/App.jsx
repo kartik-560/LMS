@@ -22,7 +22,8 @@ import AddcollegePage from "./pages/AddcollegePage";
 import CertificateTestPage from "./pages/CertificateTestPage";
 import Certificate from "./components/Certificate";
 import CourseListPage from "./pages/CourseListPage";
-
+import CertificatePreviewPage from "./pages/CertificatePreviewPage";
+import ViewFinalTest from "./pages/ViewFinalTest";
 const ROLE = {
   SUPERADMIN: "SUPERADMIN",
   ADMIN: "ADMIN",
@@ -73,7 +74,7 @@ const PublicRoute = ({ children }) => {
   return <Navigate to={roleHome[role] || "/dashboard"} replace />;
 };
 
-// ---------- App ----------
+
 const App = () => {
   const { isAuthenticated } = useAuthStore();
 
@@ -86,6 +87,17 @@ const App = () => {
         <Route path="/" element={<LandingPage />} />
 
         <Route path="/test-certificate" element={<Certificate />} />
+        <Route
+          path="/certificate/:assessmentId" 
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                ROLE.STUDENT,
+              ]}
+            >
+              <CertificatePreviewPage />
+            </ProtectedRoute>}
+        />
         <Route
           path="/courses"
           element={
@@ -117,7 +129,7 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-     
+
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
@@ -165,7 +177,6 @@ const App = () => {
           }
         />
 
-        {/* Protected */}
         <Route
           path="/dashboard"
           element={
@@ -218,7 +229,6 @@ const App = () => {
           }
         />
 
-        {/* Admin areas */}
         <Route
           path="/superadmin"
           element={
@@ -228,12 +238,20 @@ const App = () => {
           }
         />
 
-
         <Route
           path="/create_finaltest"
           element={
             <ProtectedRoute allowedRoles={[ROLE.SUPERADMIN]}>
               <CreateFinaltest />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/view_finaltest"
+          element={
+            <ProtectedRoute allowedRoles={[ROLE.SUPERADMIN, ROLE.ADMIN, ROLE.STUDENT]}>
+              <ViewFinalTest />
             </ProtectedRoute>
           }
         />
@@ -256,7 +274,6 @@ const App = () => {
           }
         />
 
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

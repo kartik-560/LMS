@@ -1,19 +1,21 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { BookOpen, Shield, Mail } from "lucide-react";
+import { BookOpen, Shield, Mail, Eye, EyeOff } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { authAPI } from "../services/api";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import useAuthStore from "../store/useAuthStore";
 import { setAuthToken } from "../services/token";
+import { jwtDecode } from 'jwt-decode';
+import { GoogleLogin } from '@react-oauth/google';
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState("choice");
   const [isLoading, setIsLoading] = useState(false);
-
+  const [showPassword, setShowPassword] = useState(false);
   const {
     register,
     handleSubmit,
@@ -59,8 +61,69 @@ const LoginPage = () => {
     }
   };
 
-  const handleGoogleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setIsLoading(true);
+    try {
+
+      const decoded = jwtDecode(credentialResponse.credential);
+      const resp = await authAPI.googleLogin({
+        credential: credentialResponse.credential,
+        email: decoded.email,
+        fullName: decoded.name,
+      });
+
+      const payload = resp?.data?.data ?? resp?.data ?? resp;
+      const user = payload?.user;
+      const token = payload?.token;
+
+      if (!user || !token) throw new Error("Malformed login response");
+
+      const canonicalRole = getCanonicalRole(user);
+
+      const userForStore = {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: canonicalRole,
+        collegeId: user.collegeId,
+        departmentId: user.departmentId,
+      };
+
+      setAuthToken(token);
+      localStorage.setItem("auth_token", token);
+      localStorage.setItem("user_role", canonicalRole);
+      localStorage.setItem("user", JSON.stringify(userForStore));
+      useAuthStore.getState().login(userForStore, token);
+
+      toast.success("Login successful!");
+
+      switch (canonicalRole) {
+        case ROLE.SUPERADMIN:
+          navigate("/superadmin", { replace: true });
+          break;
+        case ROLE.ADMIN:
+          navigate("/admin", { replace: true });
+          break;
+        case ROLE.INSTRUCTOR:
+          navigate("/instructor", { replace: true });
+          break;
+        default:
+          navigate("/dashboard", { replace: true });
+          break;
+      }
+    } catch (e) {
+      console.error("Google login error:", e);
+      toast.error(e?.response?.data?.message || "Google login failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Google Login Error
+  const handleGoogleError = () => {
+    console.error("Google Login Failed");
+    toast.error("Google login failed. Please try again.");
   };
 
 
@@ -74,26 +137,24 @@ const LoginPage = () => {
       const token = payload?.token;
       if (!user || !token) throw new Error("Malformed login response");
 
-      // --- START: CORRECTED LOGIC ---
       const canonicalRole = getCanonicalRole(user);
 
-      // Create a new, clean user object for our store
       const userForStore = {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-        role: canonicalRole, // Use the normalized role
-        // Pull the collegeId from the nested permissions object
+        role: canonicalRole,
+
         collegeId: user.permissions?.collegeId,
       };
 
-      // Now, save the clean object and token to the store and localStorage
+
       setAuthToken(token);
       localStorage.setItem("auth_token", token);
       localStorage.setItem("user_role", canonicalRole);
       localStorage.setItem("user", JSON.stringify(userForStore));
       useAuthStore.getState().login(userForStore, token);
-      // --- END: CORRECTED LOGIC ---
+
 
       switch (canonicalRole) {
         case ROLE.SUPERADMIN:
@@ -146,23 +207,30 @@ const LoginPage = () => {
         <div className="bg-white py-6 px-4 sm:py-8 sm:px-10 shadow-xl sm:rounded-2xl border border-gray-100">
           {step === "choice" && (
             <div className="space-y-4">
-              <Button
-                onClick={handleGoogleLogin}
-                className="w-full flex items-center justify-center space-x-2"
-                size="lg"
-              >
-                <img
-                  src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                  alt="Google logo"
-                  className="w-5 h-5"
+              <div className="w-full flex items-center justify-center space-x-2">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  size="large"
+                  width="100%"
+                  text="continue_with"
+                  shape="rectangular"
                 />
-                <span>Continue with Google</span>
-              </Button>
+              </div>
+
+              {/* <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">Or</span>
+                </div>
+              </div> */}
 
               <Button
                 onClick={() => setStep("email")}
                 variant="outline"
-                className="w-full flex items-center justify-center space-x-2"
+                className="w-full flex items-center justify-center space-x-2 bg-blue-600"
                 size="lg"
               >
                 <Mail size={20} className="text-gray-500" />
@@ -200,7 +268,7 @@ const LoginPage = () => {
               <div>
                 <Input
                   label="Password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   error={errors.password?.message}
                   {...register("password", {
@@ -210,8 +278,21 @@ const LoginPage = () => {
                       message: "Password must be at least 6 characters",
                     },
                   })}
+                  className="pr-10"
+
+                  rightElement={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 cursor-pointer focus:outline-none"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  }
+
                 />
-                {/* 🔑 Forgot Password Link */}
+
                 <div className="text-right mt-1">
                   <button
                     type="button"

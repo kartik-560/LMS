@@ -83,7 +83,7 @@ export default function SuperAdminDashboardPage() {
     adminLimit: 0,
     instructorLimit: 0,
   });
-
+  const [collegeCertificateCounts, setCollegeCertificateCounts] = useState(new Map());
   const [permAdmins, setPermAdmins] = useState([]);
 
   const [activeTab, setActiveTab] = useState("colleges");
@@ -180,6 +180,84 @@ export default function SuperAdminDashboardPage() {
     }));
   }
 
+  useEffect(() => {
+    const fetchCollegeCertificates = async () => {
+      if (!colleges || colleges.length === 0) return;
+
+      try {
+        // For each college, fetch certificate counts
+        const certificateCounts = await Promise.all(
+          colleges.map(async (college) => {
+            try {
+              // Get all students for this college
+              const { data: collegeData } = await collegesAPI.getCollege(college.id);
+              const students = collegeData?.data?.lists?.students ?? collegeData?.lists?.students ?? [];
+
+              // For each student, count their certificates
+              let totalCerts = 0;
+
+              await Promise.all(
+                students.map(async (student) => {
+                  try {
+                    // Get student's enrollments
+                    const enrollmentsResp = await enrollmentsAPI.listByStudent(student.id);
+                    const enrollments = enrollmentsResp?.data ?? enrollmentsResp ?? [];
+
+                    // For each enrollment, check if certificate exists
+                    await Promise.all(
+                      enrollments.map(async (enrollment) => {
+                        try {
+                          const courseId = enrollment.courseId ?? enrollment.course?.id;
+                          if (!courseId) return;
+
+                          // Get final test for this course
+                          const finalTestResp = await assessmentsAPI.getFinalTestByCourse(courseId);
+                          const finalTest = finalTestResp?.data ?? finalTestResp;
+
+                          if (!finalTest?.id) return;
+
+                          // Check if certificate exists
+                          const certResp = await assessmentsAPI.getCertificate(finalTest.id);
+                          const cert = certResp?.data ?? certResp;
+
+                          if (cert && (cert.certificateId || cert.id)) {
+                            totalCerts += 1;
+                          }
+                        } catch (err) {
+                          // Certificate doesn't exist or error occurred
+                        }
+                      })
+                    );
+                  } catch (err) {
+                    console.warn(`Failed to fetch certificates for student ${student.id}:`, err);
+                  }
+                })
+              );
+
+              return { collegeId: college.id, certificateCount: totalCerts };
+            } catch (err) {
+              console.warn(`Failed to fetch data for college ${college.id}:`, err);
+              return { collegeId: college.id, certificateCount: 0 };
+            }
+          })
+        );
+
+        // Create a map of collegeId -> certificate count
+        const certMap = new Map();
+        certificateCounts.forEach(({ collegeId, certificateCount }) => {
+          certMap.set(collegeId, certificateCount);
+        });
+
+        // Store in state
+        setCollegeCertificateCounts(certMap);
+
+      } catch (error) {
+        console.error('Error fetching college certificates:', error);
+      }
+    };
+
+    fetchCollegeCertificates();
+  }, [colleges]);
 
   useEffect(() => {
     const id = collegeDetailVM?.college?.id;
@@ -215,7 +293,7 @@ export default function SuperAdminDashboardPage() {
     }
   }
 
-  // --- helpers ---
+
   const handleApiError = (err, fallback) => {
     const msg =
       err?.response?.data?.message ||
@@ -231,7 +309,6 @@ export default function SuperAdminDashboardPage() {
     console.error(msg, err);
   };
 
-  // --- data load ---
   useEffect(() => {
     if (!isAdmin) {
       toast.error("You are not authorized to view the Super Admin dashboard.");
@@ -250,9 +327,9 @@ export default function SuperAdminDashboardPage() {
       isActive: !!u.isActive,
       permissions: u.permissions || {},
       collegeId: u.collegeId || "",
-      collegeName: u.collegeName || u.college?.name || "N/A", // ✅ Added
+      collegeName: u.collegeName || u.college?.name || "N/A",
       departmentId: u.departmentId || "",
-      departmentName: u.departmentName || u.department?.name || "N/A", // ✅ Added
+      departmentName: u.departmentName || u.department?.name || "N/A",
       avatar:
         u.avatar ||
         `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(
@@ -457,39 +534,73 @@ export default function SuperAdminDashboardPage() {
   //   });
   // }, [allAdmins, allCourses, allInstructors, allStudents]);
 
+  // const collegesWithCounts = useMemo(() => {
+  //   if (!colleges || !allAdmins || !allCourses || !allInstructors || !allStudents) {
+  //     return [];
+  //   }
+  //   return colleges.map(college => {
+  //     // Find all admins associated with THIS college using the correct path from your data
+  //     const collegeAdmins = (allAdmins || []).filter(admin =>
+  //       admin.permissions?.collegeId === college.id
+  //     );
+
+  //     // Get all courses managed by those admins
+  //     const managedCourseIds = (allCourses || [])
+  //       .filter(course => collegeAdmins.some(admin => admin.id === course.creatorId || admin.id === course.managerId))
+  //       .map(course => course.id);
+
+  //     // Calculate counts based on the list of managed courses
+  //     const instructorCount = college.instructorCount || 0;
+
+  //     const studentCount = (allStudents || []).filter(student =>
+  //       (student.assignedCourses || []).some(courseId => managedCourseIds.includes(courseId))
+  //     ).length;
+
+  //     return {
+  //       ...college, // Keep original college data (like the correct ID)
+  //       instructorCount,
+  //       studentCount,
+  //       enrolledStudents: studentCount, // Assuming enrolled is same as total students for this view
+  //       managedCourseIds, // Used for the "Courses" count badge
+  //       // Use original certificate count or default to 0
+  //       certificatesGenerated: college.certificatesGenerated || 0,
+  //     };
+  //   });
+  // }, [colleges, allAdmins, allCourses, allInstructors, allStudents]);
+
   const collegesWithCounts = useMemo(() => {
     if (!colleges || !allAdmins || !allCourses || !allInstructors || !allStudents) {
       return [];
     }
     return colleges.map(college => {
-      // Find all admins associated with THIS college using the correct path from your data
       const collegeAdmins = (allAdmins || []).filter(admin =>
         admin.permissions?.collegeId === college.id
       );
 
-      // Get all courses managed by those admins
       const managedCourseIds = (allCourses || [])
         .filter(course => collegeAdmins.some(admin => admin.id === course.creatorId || admin.id === course.managerId))
         .map(course => course.id);
 
-      // Calculate counts based on the list of managed courses
       const instructorCount = college.instructorCount || 0;
 
       const studentCount = (allStudents || []).filter(student =>
         (student.assignedCourses || []).some(courseId => managedCourseIds.includes(courseId))
       ).length;
 
+      // Get real certificate count from the state
+      const realCertificateCount = collegeCertificateCounts.get(college.id) ?? 0;
+
       return {
-        ...college, // Keep original college data (like the correct ID)
+        ...college,
         instructorCount,
         studentCount,
-        enrolledStudents: studentCount, // Assuming enrolled is same as total students for this view
-        managedCourseIds, // Used for the "Courses" count badge
-        // Use original certificate count or default to 0
-        certificatesGenerated: college.certificatesGenerated || 0,
+        enrolledStudents: studentCount,
+        managedCourseIds,
+        // Use real certificate count
+        certificatesGenerated: realCertificateCount,
       };
     });
-  }, [colleges, allAdmins, allCourses, allInstructors, allStudents]);
+  }, [colleges, allAdmins, allCourses, allInstructors, allStudents, collegeCertificateCounts]);
 
   const filteredColleges = useMemo(() => {
     const q = (collegesSearch || "").toLowerCase();
@@ -823,6 +934,13 @@ export default function SuperAdminDashboardPage() {
                 </Button>
               </Link>
 
+              <Link to="/create_finaltest">
+                <Button size="sm" className="w-full sm:w-auto">
+                  <Plus size={16} className="mr-2" />
+                  Create Final Test
+                </Button>
+              </Link>
+
               <Link to="/register" state={{ allowWhenLoggedIn: true }}>
                 <Button size="sm" className="w-full sm:w-auto">
                   <Plus size={16} className="mr-2" />
@@ -833,10 +951,9 @@ export default function SuperAdminDashboardPage() {
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6 mb-6 lg:mb-8">
 
-          {/* Colleges Card - Clicks to "colleges" tab */}
+
           <Card
             className={`p-4 sm:p-6 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200 ${activeTab === 'colleges' ? 'ring-2 ring-red-500 bg-red-50' : ''
               }`}
@@ -857,7 +974,6 @@ export default function SuperAdminDashboardPage() {
             </div>
           </Card>
 
-          {/* Admins Card - Clicks to "permissions" tab */}
           <Card
             className={`p-4 sm:p-6 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200 ${activeTab === 'permissions' ? 'ring-2 ring-red-500 bg-red-50' : ''
               }`}
@@ -878,7 +994,6 @@ export default function SuperAdminDashboardPage() {
             </div>
           </Card>
 
-          {/* Instructors Card - Clicks to "permissions" tab */}
           <Card
             className={`p-4 sm:p-6 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200 ${activeTab === 'permissions' ? 'ring-2 ring-green-500 bg-green-50' : ''
               }`}
@@ -899,7 +1014,6 @@ export default function SuperAdminDashboardPage() {
             </div>
           </Card>
 
-          {/* Students Card - Clicks to "students" tab */}
           <Card
             className={`p-4 sm:p-6 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200 ${activeTab === 'students' ? 'ring-2 ring-purple-500 bg-purple-50' : ''
               }`}
@@ -920,7 +1034,6 @@ export default function SuperAdminDashboardPage() {
             </div>
           </Card>
 
-          {/* Courses Card - Clicks to "assignments" tab */}
           <Card
             className={`p-4 sm:p-6 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200 ${activeTab === 'assignments' ? 'ring-2 ring-yellow-500 bg-yellow-50' : ''
               }`}

@@ -99,7 +99,7 @@ export const authAPI = {
     const collegeId =
       meUser.collegeId ?? meUser.college_id ?? meUser.college?.id ?? null;
 
-    return { ...meUser, collegeId }; // ✅ always flat
+    return { ...meUser, collegeId }; 
   },
 
   logout: () => {
@@ -112,6 +112,15 @@ export const authAPI = {
     !!(
       localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token")
     ),
+
+  googleLogin: (googleData) => api.post("/auth/google-login", googleData),
+
+  bulkRegister: (formData) =>
+    api.post("/auth/registrations/bulk", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }),
 };
 
 export const superAdminAPI = {
@@ -252,17 +261,17 @@ export const coursesAPI = {
     const { data } = await api.delete(`/superadmin/courses/${id}`);
     return data;
   },
-    assign: async (
-      courseId,
-      { collegeId, departmentId = null, capacity = null }
-    ) => {
-      const { data } = await api.post(`/superadmin/courses/${courseId}/assign`, {
-        collegeId,
-        departmentId,
-        capacity,
-      });
-      return data;
-    },
+  assign: async (
+    courseId,
+    { collegeId, departmentId = null, capacity = null }
+  ) => {
+    const { data } = await api.post(`/superadmin/courses/${courseId}/assign`, {
+      collegeId,
+      departmentId,
+      capacity,
+    });
+    return data;
+  },
   unassign: async (courseId, { collegeId, departmentId = null }) => {
     const { data } = await api.delete(
       `/superadmin/courses/${courseId}/unassign`,
@@ -341,56 +350,44 @@ export const uploadsAPI = {
 };
 
 export const enrollmentsAPI = {
-  // Generic list with filters
   list: (params = {}) =>
     api.get("/enrollments", { params }).then((r) => r.data),
 
-  // ⚠️ Deprecated: studentId-based lookup (kept for admin use if needed)
   listByStudent: (studentId) =>
     api.get("/enrollments", { params: { studentId } }).then((r) => r.data),
 
-  // Admin: list all enrollments for a given course
   listByCourseAdmin: (courseId) =>
     api.get(`/courses/${courseId}/enrollments`).then((r) => r.data),
 
-  // Admin: manually enroll a student
   enrollStudent: (courseId, studentId) =>
     api
       .post(`/courses/${courseId}/enrollments`, { studentId })
       .then((r) => r.data),
 
-  // Admin: remove a student from a course
   unenroll: (enrollmentId) =>
     api.delete(`/enrollments/${enrollmentId}`).then((r) => r.data),
 
-  // Student: list enrollments bound to the current auth user
   listSelf: () => api.get("/enrollments/self").then((r) => r.data),
 
-  // Instructor: list all enrollment requests for a course
   listEnrollmentRequestsForCourse: (courseId) =>
     api.get(`/courses/${courseId}/enrollment-requests`).then((r) => r.data),
 
-  // Student: request enrollment in a course
   requestEnrollment: (courseId) =>
     api.post(`/courses/${courseId}/enrollment-requests`).then((r) => r.data),
 
-  // ✅ Student: list own enrollment requests (approved/pending/rejected)
   listSelfEnrollmentRequests: () =>
     api.get("/enrollment-requests/me").then((r) => r.data),
 
-  // Instructor: update single enrollment request status
   updateEnrollmentRequestStatus: (requestId, nextStatus) =>
     api
       .patch(`/enrollment-requests/${requestId}`, { nextStatus })
       .then((r) => r.data),
 
-  // Instructor: bulk update enrollment request statuses
   bulkUpdateEnrollmentRequests: (ids, nextStatus) =>
     api
       .patch("/enrollment-requests/bulk", { ids, nextStatus })
       .then((r) => r.data),
 
-  // Instructor: list all pending enrollment requests across eligible courses
   listInstructorRequests: () =>
     api.get("/instructor/enrollment-requests").then((r) => r.data),
 };
@@ -398,11 +395,31 @@ export const enrollmentsAPI = {
 export const assessmentsAPI = {
   listByChapter: (chapterId) =>
     api.get(`/chapters/${chapterId}/assessments`).then((r) => r.data),
-  get: (id) => api.get(`/assessments/${id}`).then((r) => r.data),
+
   createForChapter: (chapterId, payload) =>
     api.post(`/chapters/${chapterId}/assessments`, payload).then((r) => r.data),
+
+  getFinalTestByCourse: (courseId) =>
+    api.get(`/courses/${courseId}/final-test`).then((r) => r.data),
+
+  createFinalTest: (courseId, payload) =>
+    api.post(`/courses/${courseId}/final-test`, payload).then((r) => r.data),
+
+  get: (id) => api.get(`/assessments/${id}`).then((r) => r.data),
+
+  getCertificate: (id) =>
+    api.get(`/assessments/${id}/certificate`).then((r) => r.data),
+
+  list: (params) => api.get("/assessments", { params }).then((r) => r.data),
+
+  submitAttempt: (assessmentId, answers) =>
+    api
+      .post(`/assessments/${assessmentId}/attempts`, { answers })
+      .then((r) => r.data),
+
   update: (id, payload) =>
     api.put(`/assessments/${id}`, payload).then((r) => r.data),
+
   remove: (id) => api.delete(`/assessments/${id}`).then((r) => r.data),
 };
 
