@@ -70,7 +70,7 @@ const InstructorDashboardPage = () => {
     averageTestScore: 0,
   });
 
-  // ---------- Helpers to normalize backend shapes ----------
+
   const pickId = (v) => v?.id ?? v?.userId ?? v?.studentId ?? v;
   const pickEmail = (v) => v?.email ?? v?.user?.email ?? v?.student?.email ?? "";
   const pickName = (v) =>
