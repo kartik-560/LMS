@@ -112,8 +112,10 @@ export const authAPI = {
     !!(
       localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token")
     ),
-
-  googleLogin: (googleData) => api.post("/auth/google-login", googleData),
+    googleLogin: (googleData) => api.post("/auth/google-login", googleData),
+    
+    googleSignup: (googleData) => api.post("/auth/signup-google", googleData),
+    
 
   bulkRegister: (formData) =>
     api.post("/auth/registrations/bulk", formData, {

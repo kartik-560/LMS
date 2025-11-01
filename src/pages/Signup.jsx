@@ -8,6 +8,7 @@ import { authAPI } from "../services/api";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import useAuthStore from "../store/useAuthStore";
+import { GoogleLogin } from "@react-oauth/google";
 const SignupPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
@@ -25,6 +26,27 @@ const SignupPage = () => {
     formState: { errors },
     reset,
   } = useForm();
+
+  const getCanonicalRole = (u) => {
+    const roleRaw = String(u?.role || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "_");
+
+    switch (roleRaw) {
+      case "SUPERADMIN":
+        return "SUPERADMIN";
+      case "ADMIN":
+        return "ADMIN";
+      case "INSTRUCTOR":
+        return "INSTRUCTOR";
+      case "STUDENT":
+        return "STUDENT";
+      default:
+        return "STUDENT";
+    }
+  };
+
 
   const startLockTimer = () => {
     setIsLocked(true);
@@ -48,8 +70,77 @@ const SignupPage = () => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
-  const handleGoogleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;
+
+  // ✅ Google Signup Handler
+  // ✅ Google Signup Handler
+  const handleGoogleSignup = async (credentialResponse) => {
+    setIsLoading(true);
+    try {
+      const resp = await authAPI.googleSignup({
+        credential: credentialResponse.credential,
+      });
+
+      const payload = resp?.data?.data ?? resp?.data ?? resp;
+      const user = payload?.user;
+      const token = payload?.token;
+
+      if (!user || !token) {
+        throw new Error("Malformed signup response");
+      }
+
+      const canonicalRole = getCanonicalRole(user);
+
+      const userForStore = {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: canonicalRole,
+        collegeId: user.collegeId,
+        departmentId: user.departmentId,
+      };
+
+      // ✅ Save to localStorage
+      localStorage.setItem("auth_token", token);
+      localStorage.setItem("user_role", canonicalRole);
+      localStorage.setItem("user", JSON.stringify(userForStore));
+      // ❌ REMOVED: setAuthToken(token);
+
+      // ✅ Update Zustand store
+      login(userForStore, token);
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      toast.success("Sign up successful!");
+
+      switch (canonicalRole) {
+        case "SUPERADMIN":
+          navigate("/superadmin", { replace: true });
+          break;
+        case "ADMIN":
+          navigate("/admin", { replace: true });
+          break;
+        case "INSTRUCTOR":
+          navigate("/instructor", { replace: true });
+          break;
+        default:
+          navigate("/dashboard", { replace: true });
+          break;
+      }
+    } catch (e) {
+      console.error("Google signup error:", e);
+      toast.error(
+        e?.response?.data?.message || e?.message || "Google signup failed"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+
+  const handleGoogleSignupError = () => {
+    console.error("Google Signup Failed");
+    toast.error("Google signup failed. Please try again.");
   };
 
   const handleSendOtp = async ({ email }) => {
@@ -66,19 +157,19 @@ const SignupPage = () => {
   };
 
   const handleVerifyOtp = async ({ email, otp }) => {
-   
+
     try {
       const response = await authAPI.loginOtpVerify(email, otp);
-     
+
       const registration = response.registration;
 
       localStorage.setItem("reg_data", JSON.stringify(registration));
       sessionStorage.setItem("reg_data", JSON.stringify(registration));
-   
+
 
       toast.success("OTP verified!");
       navigate("/register-first", { replace: true });
-     
+
     } catch (e) {
       console.error("OTP verification failed:", e);
       toast.error(e?.response?.data?.message || "Invalid OTP");
@@ -102,7 +193,7 @@ const SignupPage = () => {
             Sign in to access your learning dashboard
           </p>
           <Link to="/login">
-            
+
             <div className="text-large text-blue-700">
               Login to your account
             </div>
@@ -115,18 +206,17 @@ const SignupPage = () => {
           {step === "choice" && (
             <div className="space-y-4">
               {/* Google button */}
-              <Button
-                onClick={handleGoogleLogin}
-                className="w-full flex items-center justify-center space-x-2"
-                size="lg"
-              >
-                <img
-                  src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                  alt="Google logo"
-                  className="w-5 h-5"
+              <div className="w-full flex items-center justify-center">
+                <GoogleLogin
+                  onSuccess={handleGoogleSignup}
+                  onError={handleGoogleSignupError}
+                  size="large"
+                  width="100%"
+                  text="signup_with"
+                  shape="rectangular"
                 />
-                <span>Continue with Google</span>
-              </Button>
+              </div>
+
 
               {/* Email button */}
               <Button
@@ -198,10 +288,10 @@ const SignupPage = () => {
                     ? "Verifying OTP..."
                     : "Sending OTP..."
                   : isLocked
-                  ? `Locked (${formatLockTime(lockTimer)})`
-                  : otpSent
-                  ? "Verify OTP"
-                  : "Send OTP"}
+                    ? `Locked (${formatLockTime(lockTimer)})`
+                    : otpSent
+                      ? "Verify OTP"
+                      : "Send OTP"}
               </Button>
 
               {/* Back button */}

@@ -65,12 +65,9 @@ const LoginPage = () => {
   const handleGoogleSuccess = async (credentialResponse) => {
     setIsLoading(true);
     try {
-
-      const decoded = jwtDecode(credentialResponse.credential);
+      // ✅ Send ONLY credential to backend
       const resp = await authAPI.googleLogin({
         credential: credentialResponse.credential,
-        email: decoded.email,
-        fullName: decoded.name,
       });
 
       const payload = resp?.data?.data ?? resp?.data ?? resp;
@@ -79,16 +76,19 @@ const LoginPage = () => {
 
       if (!user || !token) throw new Error("Malformed login response");
 
+      // ✅ Use role from backend response
       const canonicalRole = getCanonicalRole(user);
 
       const userForStore = {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-        role: canonicalRole,
+        role: canonicalRole, // ✅ From backend
         collegeId: user.collegeId,
         departmentId: user.departmentId,
       };
+
+      // ✅ Save to localStorage
 
       setAuthToken(token);
       localStorage.setItem("auth_token", token);
@@ -96,8 +96,12 @@ const LoginPage = () => {
       localStorage.setItem("user", JSON.stringify(userForStore));
       useAuthStore.getState().login(userForStore, token);
 
+
+      await new Promise(resolve => setTimeout(resolve, 200));
+
       toast.success("Login successful!");
 
+      // ✅ Use navigate with replace
       switch (canonicalRole) {
         case ROLE.SUPERADMIN:
           navigate("/superadmin", { replace: true });
@@ -120,7 +124,6 @@ const LoginPage = () => {
     }
   };
 
-  // Handle Google Login Error
   const handleGoogleError = () => {
     console.error("Google Login Failed");
     toast.error("Google login failed. Please try again.");

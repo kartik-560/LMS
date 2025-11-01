@@ -26,14 +26,16 @@ import {
   adminScopedAPI,
   authAPI,
   FALLBACK_THUMB,
+  enrollmentsAPI,
+  assessmentsAPI,
 } from "../services/api";
+import useAuthStore from "../store/useAuthStore";
 
-
-const useAuthStore = () => ({
-  user: { fullName: "Admin User" },
-  token: "mock-jwt-token",
-  logout: () => console.log("Logged out"),
-});
+// const useAuthStore = () => ({
+//   user: { fullName: "Admin User" },
+//   token: "mock-jwt-token",
+//   logout: () => console.log("Logged out"),
+// });
 
 const Button = forwardRef(
   (
@@ -191,9 +193,12 @@ export default function AdminDashboardPage() {
   const [instructors, setInstructors] = useState([]);
   const [students, setStudents] = useState([]);
   const [courses, setCourses] = useState([]);
+  const [studentStats, setStudentStats] = useState({});
+  const [loadingStats, setLoadingStats] = useState(false);
 
 
   const normRole = (r) => String(r || "").replace(/[^A-Z]/gi, "").toUpperCase();
+
   async function makeAdminAdapter() {
     const me = await authAPI.me();
     const role = normRole(me?.role);
@@ -245,9 +250,6 @@ export default function AdminDashboardPage() {
     };
   }
 
-
-
-  // Build an index of instructor -> course count/titles from the courses list
   const instructorCourseIndex = useMemo(() => {
     const map = {};
     for (const c of courses || []) {
@@ -271,7 +273,6 @@ export default function AdminDashboardPage() {
     return map;
   }, [courses]);
 
-  // Top cards stats with robust fallbacks
   const stats = useMemo(() => {
     const ov = overview?.totals ?? overview ?? {};
     const totalInstructors =
@@ -313,7 +314,7 @@ export default function AdminDashboardPage() {
           api.students(),
           api.courses(),
         ]);
-        
+
         setOverview(ov?.data?.overview ?? { courses: 0, students: 0, instructors: 0 });
 
         const normInstructors = (ins?.data || []).map((i) => ({
@@ -363,7 +364,6 @@ export default function AdminDashboardPage() {
       }
     })();
   }, []);
-
 
   const filteredInstructors = useMemo(() => {
     const q = (searchTerm || "").toLowerCase();
@@ -434,6 +434,160 @@ export default function AdminDashboardPage() {
       toast.error(`Failed to ${action} user`);
     }
   };
+
+  // const fetchStudentStats = async (studentsArray) => {
+  //   try {
+  //     const statsMap = {};
+
+  //     console.log("📊 Starting to fetch stats for students:", studentsArray);
+
+  //     for (const student of studentsArray) {
+  //       try {
+  //         console.log(`\n🔍 Processing student: ${student.fullName} (ID: ${student.id})`);
+
+  //         // Get enrollments
+  //         const enrollments = await enrollmentsAPI.listByStudent(student.id);
+  //         console.log(`📚 Enrollments for ${student.id}:`, enrollments);
+
+  //         let finalTests = 0;
+  //         let interviews = 0;
+  //         let certifications = 0;
+
+  //         // Process each enrollment
+  //         if (enrollments && enrollments.length > 0) {
+  //           console.log(`   Found ${enrollments.length} enrollments`);
+
+  //           for (const enrollment of enrollments) {
+  //             try {
+  //               console.log(`   📖 Processing enrollment - Course ID: ${enrollment.courseId}`);
+
+  //               // Get final test for this course
+  //               try {
+  //                 const finalTest = await assessmentsAPI.getFinalTestByCourse(
+  //                   enrollment.courseId
+  //                 );
+  //                 console.log(`   ✅ Final test for course ${enrollment.courseId}:`, finalTest);
+
+  //                 if (finalTest) {
+  //                   finalTests += 1;
+  //                 }
+  //               } catch (e) {
+  //                 console.log(`   ℹ️ No final test for course ${enrollment.courseId}`);
+  //               }
+
+  //               // Get assessments for this course
+  //               try {
+  //                 console.log(`   📋 Fetching assessments for course ${enrollment.courseId}`);
+
+  //                 const courseAssessments = await assessmentsAPI.list({
+  //                   courseId: enrollment.courseId
+  //                 });
+  //                 console.log(`   📋 Course assessments:`, courseAssessments);
+
+  //                 if (courseAssessments && Array.isArray(courseAssessments)) {
+  //                   console.log(`   Total assessments in course: ${courseAssessments.length}`);
+
+  //                   // Log each assessment
+  //                   courseAssessments.forEach((a, idx) => {
+  //                     console.log(`   [${idx}] Assessment:`, {
+  //                       id: a.id,
+  //                       type: a.type,
+  //                       name: a.name
+  //                     });
+  //                   });
+
+  //                   // Count interviews
+  //                   const courseInterviews = courseAssessments.filter(
+  //                     (a) => a.type === "interview"
+  //                   ).length;
+  //                   interviews += courseInterviews;
+  //                   console.log(`   🎤 Interviews in this course: ${courseInterviews}`);
+
+  //                   // Count certifications (completed assessments)
+  //                   const courseCertifications = courseAssessments.filter(
+  //                     (a) => a.completed === true || a.certificateIssued === true
+  //                   ).length;
+  //                   certifications += courseCertifications;
+  //                   console.log(`   🏆 Certifications in this course: ${courseCertifications}`);
+  //                 }
+  //               } catch (e) {
+  //                 console.error(`   ❌ Error fetching assessments for course ${enrollment.courseId}:`, e);
+  //               }
+
+  //             } catch (e) {
+  //               console.error(`   ❌ Error processing enrollment:`, e);
+  //             }
+  //           }
+  //         } else {
+  //           console.log(`   ⚠️ No enrollments found for student ${student.id}`);
+  //         }
+
+  //         statsMap[student.id] = { finalTests, interviews, certifications };
+  //         console.log(`✅ Stats for ${student.fullName}:`, statsMap[student.id]);
+
+  //       } catch (e) {
+  //         console.error(`❌ Failed to fetch stats for student ${student.id}:`, e);
+  //         statsMap[student.id] = { finalTests: 0, interviews: 0, certifications: 0 };
+  //       }
+  //     }
+
+  //     console.log("\n📊 Final stats map:", statsMap);
+  //     return statsMap;
+  //   } catch (e) {
+  //     console.error("❌ Failed to fetch student stats:", e);
+  //     return {};
+  //   }
+  // };
+
+  useEffect(() => {
+    const loadStudents = async () => {
+      try {
+        setLoading(true);
+
+        // ✅ Get collegeId from authenticated user
+        const { user } = useAuthStore.getState();
+        const collegeId = user?.collegeId || user?.college?.id;
+
+        if (!collegeId) {
+          toast.error("College ID not found");
+          return;
+        }
+
+        console.log("Loading students for college:", collegeId);
+
+        // Get students - already includes stats
+        const response = await adminScopedAPI.students(collegeId);
+        const studentsData = response.data || response;
+
+        console.log("Students with stats:", studentsData);
+
+        setStudents(studentsData);
+
+        // Convert to stats map for easier lookup
+        const statsMap = studentsData.reduce((acc, s) => {
+          acc[s.id] = {
+            finalTests: s.finalTests || 0,
+            interviews: s.interviews || 0,
+            certifications: s.certifications || 0,
+          };
+          return acc;
+        }, {});
+
+        setStudentStats(statsMap);
+        setLoadingStats(false);
+      } catch (e) {
+        console.error("Error loading students:", e);
+        toast.error("Failed to load students");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStudents();
+  }, []);
+
+
+
 
   if (loading) {
     return (
@@ -962,7 +1116,7 @@ export default function AdminDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredStudents.map((s) => {
+                    {/* {filteredStudents.map((s) => {
                       const finalTests = Math.floor(Math.random() * 5);
                       const interviews = Math.floor(Math.random() * 5);
                       const certifications = Math.floor(Math.random() * 5);
@@ -986,18 +1140,7 @@ export default function AdminDashboardPage() {
                               </div>
                             </div>
                           </td>
-                          {/* <td className="px-6 py-4 text-left">
-                            {s.assignedCourses?.length ? (
-                              <span className="text-gray-900">
-                                {s.assignedCourses
-                                  .map((id) => courseTitleById[id] || id)
-                                  .join(", ")}
-                              </span>
-                            ) : (
-                              <span className="text-gray-500">No Course</span>
-                            )}
-                          </td> */}
-
+                          
                           <td className="px-6 py-4 whitespace-nowrap text-center">
                             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 text-blue-700 text-sm font-medium">
                               {s.assignedCourses?.length || 0}
@@ -1020,7 +1163,58 @@ export default function AdminDashboardPage() {
                           </td>
                         </tr>
                       );
+                    })} */}
+
+                    {filteredStudents.map((s) => {
+                      const stats = studentStats[s.id] || {
+                        finalTests: 0,
+                        interviews: 0,
+                        certifications: 0
+                      };
+
+                      return (
+                        <tr key={s.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <img
+                                src={s.avatar}
+                                alt={s.fullName}
+                                className="w-9 h-9 rounded-full mr-3"
+                              />
+                              <div>
+                                <div className="font-medium text-gray-900">
+                                  {s.fullName}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  {s.email}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 text-blue-700 text-sm font-medium">
+                              {s.assignedCourses?.length || 0}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <span className="text-blue-700 font-medium">
+                              {loadingStats ? "..." : stats.finalTests}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <span className="text-green-600 font-medium">
+                              {loadingStats ? "..." : stats.interviews}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <span className="text-purple-600 font-medium">
+                              {loadingStats ? "..." : stats.certifications}
+                            </span>
+                          </td>
+                        </tr>
+                      );
                     })}
+
                   </tbody>
                 </table>
               </div>
